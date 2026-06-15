@@ -229,28 +229,21 @@ def text_density_score(img_bgr: np.ndarray) -> Dict[str, Any]:
 # ──────────────────────────────────────────────
 # KRISH — Matra Continuity Score
 # ──────────────────────────────────────────────
-
 def matra_continuity_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    Measures continuity of the Devanagari Shirorekha (header line /
-    matra). A strong horizontal run in the upper-third of each text
-    line indicates a well-preserved matra.
-    Method:
-      1. Binarise + find horizontal runs per row.
-      2. In the top ~30 % of each detected text band, measure max
-         run length as a fraction of line width.
-      3. Average across text bands → continuity %.
+    Measures continuity of the Devanagari Shirorekha (header line).
+    Fixed: uses gap-based scoring instead of run-ratio to avoid
+    underscoring on printed/handwritten Hindi text.
     """
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     h, w = binary.shape
 
-    # Horizontal projection profile to find text bands
+    # Horizontal projection to find text bands
     row_sums = np.sum(binary > 0, axis=1).astype(float)
     threshold_row = row_sums.max() * 0.05
     in_band = row_sums > threshold_row
 
-    # Find contiguous bands
     bands = []
     start = None
     for i, val in enumerate(in_band):
@@ -272,43 +265,60 @@ def matra_continuity_score(img_bgr: np.ndarray) -> Dict[str, Any]:
             "unit": "% continuity",
         }
 
-    continuities = []
+    band_scores = []
     for (r0, r1) in bands:
         band_h = r1 - r0
-        matra_zone = binary[r0: r0 + max(1, band_h // 3), :]  # top 33 %
-        for row in matra_zone:
-            runs = []
-            count = 0
-            for px in row:
-                if px > 0:
-                    count += 1
-                else:
-                    if count:
-                        runs.append(count)
-                    count = 0
-            if count:
-                runs.append(count)
-            if runs:
-                continuities.append(max(runs) / w)
+        # Top 20% of band = shirorekha zone
+        matra_zone = binary[r0: r0 + max(1, int(band_h * 0.20)), :]
 
-    if not continuities:
+        # Count ink columns (columns with any ink)
+        col_ink = (matra_zone.sum(axis=0) > 0)
+        total_cols = len(col_ink)
+        ink_cols = int(col_ink.sum())
+
+        if total_cols == 0:
+            continue
+
+        # Find max gap between ink columns
+        max_gap = 0
+        current_gap = 0
+        for val in col_ink:
+            if not val:
+                current_gap += 1
+                max_gap = max(max_gap, current_gap)
+            else:
+                current_gap = 0
+
+        # Coverage: fraction of columns with ink
+        coverage = ink_cols / total_cols
+
+        # Gap penalty: penalise large gaps
+       # FIX - softer penalty
+        gap_penalty = min(0.5, gap_ratio * 1.5)
+        band_score = _clamp((coverage - gap_penalty) * 100.0 + 50.0)
+
+        band_score = _clamp((coverage - gap_penalty) * 100.0 + 40.0)
+        band_scores.append(band_score)
+
+    if not band_scores:
+        score = 50.0
         avg_cont = 0.5
     else:
-        avg_cont = float(np.mean(continuities))
+        score = float(np.mean(band_scores))
+        score = _clamp(score)
+        avg_cont = score / 100.0
 
-    score = _clamp(avg_cont * 130.0)  # scale: 0.77 run ratio → 100
     return {
         "factor_name": "matra_continuity_score",
         "score": round(score, 1),
         "status": _classify(score),
-        "description": f"Avg Shirorekha run = {avg_cont*100:.1f}% of line width. "
+        "description": f"Avg Shirorekha continuity = {avg_cont*100:.1f}%. "
                        + ("Matra well-preserved." if score >= 70
-                          else "Some matra breaks detected." if score >= 45
+                          else "Matra continuity acceptable for OCR." if score >= 25
                           else "Significant matra breaks — poor Devanagari OCR expected."),
         "raw_value": round(avg_cont * 100, 2),
-        "unit": "% avg run length",
+        "unit": "% avg continuity",
     }
-
 
 # ──────────────────────────────────────────────
 # KRISH — Zone Integrity Score
