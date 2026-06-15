@@ -136,39 +136,6 @@ def run_tesseract(img):
     except Exception:
         return None, None
 
-def make_radar(factor_results):
-    keys   = list(DISPLAY_NAMES.keys())
-    labels = [DISPLAY_NAMES[k] for k in keys]
-    scores = [factor_results.get(k,{}).get("score",0) for k in keys]
-    fig = go.Figure()
-    fig.add_trace(go.Scatterpolar(
-        r=scores+[scores[0]], theta=labels+[labels[0]],
-        fill="toself", fillcolor="rgba(0,196,180,0.15)",
-        line=dict(color="#00C4B4",width=2), name="Your Image",
-        marker=dict(color="#1A2B4A",size=7),
-    ))
-    fig.add_trace(go.Scatterpolar(
-        r=[70]*len(labels)+[70], theta=labels+[labels[0]],
-        fill="none",
-        line=dict(color="rgba(245,158,11,0.5)",width=1.5,dash="dot"),
-        name="Good threshold (70)",
-    ))
-    fig.update_layout(
-        polar=dict(
-            bgcolor="#F9FAFB",
-            radialaxis=dict(range=[0,100],tickfont=dict(size=9),
-                gridcolor="#E5E7EB",linecolor="#D1D5DB"),
-            angularaxis=dict(tickfont=dict(size=11,color="#374151"),
-                linecolor="#E5E7EB"),
-        ),
-        showlegend=True,
-        legend=dict(orientation="h",y=-0.15,font=dict(size=11)),
-        paper_bgcolor="rgba(0,0,0,0)",
-        margin=dict(t=20,b=20,l=40,r=40),
-        height=430,
-    )
-    return fig
-
 # ── Session state init ────────────────────────────────────────────────────────
 # This keeps the image and results alive when user switches pages
 if "analysis_done"    not in st.session_state: st.session_state.analysis_done    = False
@@ -448,29 +415,13 @@ if "🏠 Analyse Image" in nav:
         st.markdown("<br>", unsafe_allow_html=True)
 
         # ── Tabs ─────────────────────────────────
-        tab1, tab2, tab3, tab4 = st.tabs([
-            "📡 Radar Chart",
+        tab1, tab2, tab3 = st.tabs([
             "🔬 Factor Details",
             "📝 OCR Text",
             "💡 Recommendations",
         ])
 
         with tab1:
-            st.plotly_chart(make_radar(final_results), use_container_width=True)
-            fig_w = go.Figure(go.Bar(
-                x=list(DISPLAY_NAMES.values()),
-                y=[WEIGHTS[k]*100 for k in DISPLAY_NAMES],
-                marker_color="#00C4B4", opacity=0.85,
-            ))
-            fig_w.update_layout(
-                title="Factor Weights (%)", height=220,
-                paper_bgcolor="rgba(0,0,0,0)",
-                margin=dict(t=30,b=10,l=20,r=20),
-                yaxis=dict(title="Weight (%)"),
-            )
-            st.plotly_chart(fig_w, use_container_width=True)
-
-        with tab2:
             st.markdown("Click any factor to see its detailed explanation:")
             for key, display in DISPLAY_NAMES.items():
                 r      = final_results.get(key, {})
@@ -495,7 +446,7 @@ if "🏠 Analyse Image" in nav:
                         st.progress(int(min(sc, 100)))
                         st.markdown(f"<div style='text-align:center;font-size:12px;color:#6B7280;'>out of 100</div>", unsafe_allow_html=True)
 
-        with tab3:
+        with tab2:
             if ocr_conf is not None and ocr_text:
                 st.markdown(f"**Tesseract Confidence: {ocr_conf}%**")
                 st.text_area("Extracted Text", ocr_text, height=220)
@@ -505,7 +456,7 @@ if "🏠 Analyse Image" in nav:
                     "Make sure Tesseract is installed and the path is set correctly in app.py."
                 )
 
-        with tab4:
+        with tab3:
             for rec in recs:
                 is_warn = "🔧" in rec
                 box_cls = "rec-box warn" if is_warn else "rec-box"
