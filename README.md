@@ -73,13 +73,13 @@ ocr_platform/
 ## OCR Readiness Score Weights
 | Factor              | Weight |
 |---------------------|--------|
-| Blur                | 20%    |
-| Noise               | 15%    |
-| Resolution          | 15%    |
-| Contrast            | 15%    |
-| Stroke Width        | 10%    |
-| Text Density        | 10%    |
-| Matra Continuity    | 10%    |
-| Zone Integrity      | 5%     |
-| CC Stability        | 10%    |
-| Skew Penalty        | 10%    |
+| Blur                | 15%    |
+| Noise               | 11%    |
+| Resolution          | 11%    |
+| Contrast            | 11%    |
+| CC Stability        | 9%     |
+| Skew Penalty        | 9%     |
+| Stroke Width        | 7%     |
+| Text Density        | 7%     |
+| Matra Continuity    | 7%     |
+| Zone Integrity      | 3%     |

@@ -497,16 +497,16 @@ def skew_penalty_score(img_bgr: np.ndarray) -> Dict[str, Any]:
 # ──────────────────────────────────────────────
 
 WEIGHTS = {
-    "noise_score":                       0.12,
-    "resolution_score":                  0.12,
-    "blur_score":                        0.16,
-    "contrast_score":                    0.12,
-    "stroke_width_score":                0.08,
-    "text_density_score":                0.08,
-    "matra_continuity_score":            0.08,
-    "zone_integrity_score":              0.04,
-    "connected_component_stability_score": 0.10,
-    "skew_penalty_score":                0.10,
+    "noise_score":                       0.11,
+    "resolution_score":                  0.11,
+    "blur_score":                        0.15,
+    "contrast_score":                    0.11,
+    "stroke_width_score":                0.07,
+    "text_density_score":                0.07,
+    "matra_continuity_score":            0.07,
+    "zone_integrity_score":              0.03,
+    "connected_component_stability_score": 0.09,
+    "skew_penalty_score":                0.09,
 }
 
 FACTOR_FUNCTIONS = {
