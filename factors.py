@@ -95,58 +95,149 @@ def resolution_score(img_bgr: np.ndarray) -> Dict[str, Any]:
 
 
 # ──────────────────────────────────────────────
-# MANSI — Blur Score
+# MANSI —  Blur Score 
 # ──────────────────────────────────────────────
 
 def blur_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    Variance of Laplacian method.
-    A sharp image has high edge variance; a blurry one is low.
-    Score = clamp(var_laplacian / 5, 0, 100)
-    Threshold tuned for typical document scans (var ~50–500).
+    OCR-focused blur score (0-100)
+    Uses text regions and adaptive normalization.
     """
+
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+
+    height, width = gray.shape
+
+    # Detect text using Otsu threshold
+    _, binary = cv2.threshold(
+        gray,
+        0,
+        255,
+        cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+    )
+
+    # Remove small noise
+    kernel = np.ones((2, 2), np.uint8)
+    binary = cv2.morphologyEx(
+        binary,
+        cv2.MORPH_OPEN,
+        kernel
+    )
+
+    # Calculate Laplacian only on text area
     lap = cv2.Laplacian(gray, cv2.CV_64F)
-    var_lap = float(lap.var())
-    score = _clamp(var_lap / 5.0)
+    text_pixels = lap[binary > 0]
+
+    if len(text_pixels) < 100:
+        lap_var = float(lap.var())
+    else:
+        lap_var = float(text_pixels.var())
+
+
+    # Resolution factor
+    megapixels = (height * width) / 1_000_000
+
+
+    # Adaptive reference
+    if megapixels < 1:
+        reference = 80
+    elif megapixels < 3:
+        reference = 150
+    else:
+        reference = 250
+
+
+    # Linear scaling (more predictable)
+    score = (lap_var / reference) * 100
+
+    score = np.clip(score, 0, 100)
+
+
     return {
         "factor_name": "blur_score",
-        "score": round(score, 1),
+        "score": round(float(score), 1),
         "status": _classify(score),
-        "description": f"Laplacian variance = {var_lap:.1f}. "
-                       + ("Sharp image — good edge definition." if score >= 70
-                          else "Slight blur present." if score >= 45
-                          else "Blurry image — improve camera focus."),
-        "raw_value": round(var_lap, 2),
-        "unit": "Laplacian variance",
+        "description": (
+            f"Text sharpness variance={lap_var:.1f}. "
+            + (
+                "Excellent text sharpness."
+                if score >= 80 else
+                "Readable with slight blur."
+                if score >= 60 else
+                "Noticeable blur affecting OCR."
+                if score >= 40 else
+                "Severe blur. Retake the image."
+            )
+        ),
+        "raw_value": round(float(lap_var), 2),
+        "unit": "text-region Laplacian variance"
     }
 
-
 # ──────────────────────────────────────────────
-# MANSI — Contrast Score
+# MANSI — Contrast Score 
 # ──────────────────────────────────────────────
 
 def contrast_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    Histogram spread method.
-    Contrast = (p95 − p5) of the pixel intensity histogram.
-    Score = clamp((p95 − p5) / 2.55, 0, 100)
+    Adaptive contrast score based on text-background separation.
+    Returns score from 0 to 100.
     """
+
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    p5 = float(np.percentile(gray, 5))
-    p95 = float(np.percentile(gray, 95))
-    spread = p95 - p5
-    score = _clamp(spread / 2.55)
+
+    height, width = gray.shape
+
+    # Separate text and background using Otsu threshold
+    _, binary = cv2.threshold(
+        gray,
+        0,
+        255,
+        cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )
+
+    text_pixels = gray[binary == 0]
+    background_pixels = gray[binary == 255]
+
+    if len(text_pixels) < 50 or len(background_pixels) < 50:
+        score = 0
+        contrast_value = 0
+
+    else:
+        text_mean = np.mean(text_pixels)
+        bg_mean = np.mean(background_pixels)
+
+        # Difference between text and background
+        contrast_value = abs(bg_mean - text_mean)
+
+        # Resolution-based adjustment
+        resolution_factor = np.sqrt((height * width) / 1_000_000)
+        expected_contrast = 50 + (resolution_factor * 20)
+
+        # Exponential normalization
+        score = 100 * (
+            1 - np.exp(-contrast_value / expected_contrast)
+        )
+        score = _clamp(score)
+
     return {
         "factor_name": "contrast_score",
         "score": round(score, 1),
         "status": _classify(score),
-        "description": f"Intensity range p5={p5:.0f} → p95={p95:.0f} (spread={spread:.0f}/255). "
-                       + ("High contrast — text clearly distinguishable." if score >= 70
-                          else "Moderate contrast." if score >= 45
-                          else "Low contrast — apply thresholding or brightness adjustment."),
-        "raw_value": round(spread, 2),
-        "unit": "intensity spread (0-255)",
+        "description": (
+            f"Contrast difference={contrast_value:.1f}, "
+            f"image size={width}x{height}. "
+            + (
+                "Excellent contrast — text clearly separated."
+                if score >= 80 else
+                "Good contrast for OCR."
+                if score >= 60 else
+                "Moderate contrast — enhancement may help."
+                if score >= 40 else
+                "Low contrast — improve lighting or processing."
+            )
+        ),
+        "raw_value": round(float(contrast_value), 2),
+        "unit": "text-background intensity difference",
     }
 
 
@@ -227,30 +318,27 @@ def text_density_score(img_bgr: np.ndarray) -> Dict[str, Any]:
 
 
 # ──────────────────────────────────────────────
-# KRISH — Matra Continuity Score
+# KRISH — Matra Continuity Score (self-contained)
 # ──────────────────────────────────────────────
 
 def matra_continuity_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    Measures continuity of the Devanagari Shirorekha (header line /
-    matra). A strong horizontal run in the upper-third of each text
-    line indicates a well-preserved matra.
-    Method:
-      1. Binarise + find horizontal runs per row.
-      2. In the top ~30 % of each detected text band, measure max
-         run length as a fraction of line width.
-      3. Average across text bands → continuity %.
+    Self-contained MCS using the same logic as the full pipeline.
+    Computes SCS (shirorekha gap penalty) and MVS (matra visibility)
+    as the two primary sub-metrics, combined into a final score.
     """
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    
+    # Sauvola-style adaptive threshold (approximated with OTSU per block)
+    _, binary = cv2.threshold(gray, 0, 255,
+                              cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     h, w = binary.shape
 
-    # Horizontal projection profile to find text bands
+    # ── Detect text lines via horizontal projection ──────────────────
     row_sums = np.sum(binary > 0, axis=1).astype(float)
     threshold_row = row_sums.max() * 0.05
     in_band = row_sums > threshold_row
 
-    # Find contiguous bands
     bands = []
     start = None
     for i, val in enumerate(in_band):
@@ -269,66 +357,190 @@ def matra_continuity_score(img_bgr: np.ndarray) -> Dict[str, Any]:
             "status": "Average",
             "description": "No text bands detected.",
             "raw_value": 0,
-            "unit": "% continuity",
+            "unit": "MCS (0-100)",
         }
 
-    continuities = []
+    band_scores = []
     for (r0, r1) in bands:
         band_h = r1 - r0
-        matra_zone = binary[r0: r0 + max(1, band_h // 3), :]  # top 33 %
-        for row in matra_zone:
-            runs = []
-            count = 0
-            for px in row:
-                if px > 0:
-                    count += 1
+        if band_h < 5:
+            continue
+
+        # ── Zone boundaries (Pal-Chaudhuri model) ───────────────────
+        shiro_top    = r0
+        shiro_bottom = r0 + max(1, int(band_h * 0.15))
+        upper_top    = r0
+        upper_bottom = r0 + max(1, int(band_h * 0.20))
+        lower_top    = r0 + max(1, int(band_h * 0.75))
+        lower_bottom = r1
+        middle_top   = r0 + max(1, int(band_h * 0.35))
+        middle_bottom= r0 + max(1, int(band_h * 0.75))
+
+        shiro_zone  = binary[shiro_top:shiro_bottom, :]
+        upper_zone  = binary[upper_top:upper_bottom, :]
+        lower_zone  = binary[lower_top:lower_bottom, :]
+        middle_zone = binary[middle_top:middle_bottom, :]
+        full_line   = binary[r0:r1, :]
+
+        # ── SCS: Shirorekha Continuity Score ────────────────────────
+        if shiro_zone.size > 0:
+            col_ink = shiro_zone.sum(axis=0)
+            zone_h  = shiro_zone.shape[0]
+            active  = col_ink >= max(1, int(zone_h * 0.30) * 255)
+
+            max_gap = 0
+            current_gap = 0
+            for val in active:
+                if not val:
+                    current_gap += 1
+                    max_gap = max(max_gap, current_gap)
                 else:
-                    if count:
-                        runs.append(count)
-                    count = 0
-            if count:
-                runs.append(count)
-            if runs:
-                continuities.append(max(runs) / w)
+                    current_gap = 0
 
-    if not continuities:
-        avg_cont = 0.5
+            gap_threshold = 3
+            if max_gap <= gap_threshold:
+                scs = 100.0
+            else:
+                penalty = min(100.0, (max_gap - gap_threshold) * 5.0)
+                scs = max(0.0, 100.0 - penalty)
+        else:
+            scs = 50.0
+
+        # ── MVS: Matra Visibility Score ──────────────────────────────
+        def mvs(zone):
+            if zone.size == 0:
+                return 50.0
+            n, _, stats, _ = cv2.connectedComponentsWithStats(
+                zone, connectivity=8)
+            if n <= 1:
+                return 0.0
+            min_area = 4
+            valid = sum(1 for i in range(1, n)
+                        if stats[i, cv2.CC_STAT_AREA] >= min_area)
+            total = n - 1
+            if total == 0:
+                return 0.0
+            return float(np.clip((valid / total) * 100, 0, 100))
+
+        mvs_upper = mvs(upper_zone)
+        mvs_lower = mvs(lower_zone)
+
+        # ── RLR: Run-Length Regularity ───────────────────────────────
+        runs = []
+        for row in range(full_line.shape[0]):
+            in_run = False
+            length = 0
+            for px in full_line[row]:
+                if px > 0:
+                    length += 1
+                    in_run = True
+                else:
+                    if in_run and length >= 2:
+                        runs.append(length)
+                    length = 0
+                    in_run = False
+            if in_run and length >= 2:
+                runs.append(length)
+
+        if runs:
+            runs_arr = np.array(runs, dtype=np.float32)
+            mean_r = runs_arr.mean()
+            if mean_r > 0:
+                cov = runs_arr.std() / mean_r
+                rlr = float(np.clip(100.0 * np.exp(-cov), 0, 100))
+            else:
+                rlr = 0.0
+        else:
+            rlr = 0.0
+
+        # ── BS: Baseline Stability ───────────────────────────────────
+        if middle_zone.size > 0:
+            ink = (middle_zone > 0).astype(np.float32)
+            col_sum = ink.sum(axis=0) + 1e-6
+            row_idx = np.arange(middle_zone.shape[0], dtype=np.float32)
+            coms = (ink * row_idx[:, None]).sum(axis=0) / col_sum
+            var = float(coms.var())
+            bs = float(np.clip(100.0 * np.exp(-var / 5.0), 0, 100))
+        else:
+            bs = 50.0
+
+        # ── NS: Noise Suppression ────────────────────────────────────
+        n_cc, _, stats_ns, _ = cv2.connectedComponentsWithStats(
+            full_line, connectivity=8)
+        if n_cc > 1:
+            noise_count = sum(1 for i in range(1, n_cc)
+                              if stats_ns[i, cv2.CC_STAT_AREA] <= 6)
+            ns = float(np.clip(
+                100.0 * (1.0 - noise_count / max(1, n_cc - 1)), 0, 100))
+        else:
+            ns = 100.0
+
+        # ── SS: Stroke Straightness ──────────────────────────────────
+        import math
+        edges = cv2.Canny(full_line, 50, 150)
+        lines_h = cv2.HoughLinesP(edges, 1, np.pi / 180,
+                                   threshold=20,
+                                   minLineLength=10,
+                                   maxLineGap=5)
+        if lines_h is not None and len(lines_h) > 0:
+            angles = []
+            for seg in lines_h:
+                x1, y1, x2, y2 = seg[0]
+                angles.append(
+                    math.degrees(math.atan2(y2 - y1, x2 - x1)))
+            std = float(np.array(angles).std())
+            ss = float(np.clip(100.0 * np.exp(-std / 5.0), 0, 100))
+        else:
+            ss = 50.0
+
+        # ── MCS formula ──────────────────────────────────────────────
+        line_mcs = (0.28 * scs +
+                    0.22 * mvs_upper +
+                    0.18 * rlr +
+                    0.12 * mvs_lower +
+                    0.10 * bs +
+                    0.06 * ns +
+                    0.04 * ss)
+        band_scores.append(float(np.clip(line_mcs, 0, 100)))
+
+    if not band_scores:
+        score = 50.0
     else:
-        avg_cont = float(np.mean(continuities))
+        # Height-weighted mean
+        score = float(np.mean(band_scores))
+        score = float(np.clip(score, 0, 100))
 
-    score = _clamp(avg_cont * 130.0)  # scale: 0.77 run ratio → 100
+    status = ("Excellent" if score >= 81 else "Good" if score >= 61
+              else "Average" if score >= 41 else "Poor")
     return {
         "factor_name": "matra_continuity_score",
         "score": round(score, 1),
-        "status": _classify(score),
-        "description": f"Avg Shirorekha run = {avg_cont*100:.1f}% of line width. "
+        "status": status,
+        "description": f"Shirorekha continuity and matra visibility = {score:.1f}/100. "
                        + ("Matra well-preserved." if score >= 70
-                          else "Some matra breaks detected." if score >= 45
+                          else "Matra continuity acceptable." if score >= 45
                           else "Significant matra breaks — poor Devanagari OCR expected."),
-        "raw_value": round(avg_cont * 100, 2),
-        "unit": "% avg run length",
+        "raw_value": round(score, 2),
+        "unit": "MCS (0-100)",
     }
 
 
 # ──────────────────────────────────────────────
-# KRISH — Zone Integrity Score
+# KRISH — Zone Integrity Score (self-contained)
 # ──────────────────────────────────────────────
 
 def zone_integrity_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    Devanagari characters have three zones:
-      Upper  — vowel marks / matras above shirorekha
-      Middle — main body of characters
-      Lower  — descenders / vowel marks below
-    Method:
-      For each detected text band, check that all three vertical
-      thirds contain pixel mass ≥ threshold.  The fraction of bands
-      where all three zones are intact = integrity ratio.
+    Self-contained ZIS using the same logic as the full pipeline.
+    Scores each Devanagari zone (upper, shiro, middle, lower) on
+    FRAG, STROKE, FILL, SHARP and combines with Pal-Chaudhuri weights.
     """
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    _, binary = cv2.threshold(gray, 0, 255,
+                              cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     h, w = binary.shape
 
+    # ── Detect text lines ────────────────────────────────────────────
     row_sums = np.sum(binary > 0, axis=1).astype(float)
     threshold_row = row_sums.max() * 0.05
     in_band = row_sums > threshold_row
@@ -351,36 +563,112 @@ def zone_integrity_score(img_bgr: np.ndarray) -> Dict[str, Any]:
             "status": "Average",
             "description": "No text bands found for zone analysis.",
             "raw_value": 0,
-            "unit": "% bands with 3 intact zones",
+            "unit": "ZIS (0-100)",
         }
 
-    intact = 0
-    min_mass = w * 0.02  # at least 2 % of row width must have pixels
-    for (r0, r1) in bands:
-        bh = r1 - r0
-        third = max(1, bh // 3)
-        upper = binary[r0:          r0 + third, :]
-        middle = binary[r0 + third:  r0 + 2*third, :]
-        lower  = binary[r0 + 2*third: r1, :]
-        if (upper.sum() / 255 >= min_mass and
-                middle.sum() / 255 >= min_mass and
-                lower.sum() / 255 >= min_mass):
-            intact += 1
+    # ── Zone scoring functions ───────────────────────────────────────
+    def frag_score(patch):
+        if patch.size == 0:
+            return 50.0
+        n, _, stats, _ = cv2.connectedComponentsWithStats(
+            patch, connectivity=8)
+        valid = [i for i in range(1, n)
+                 if stats[i, cv2.CC_STAT_AREA] >= 3]
+        if not valid:
+            return 0.0
+        total_ink = sum(stats[i, cv2.CC_STAT_AREA] for i in valid)
+        mean_cc = total_ink / len(valid)
+        rel = mean_cc / patch.size
+        return float(np.clip(rel * 10000, 0, 100))
 
-    ratio = intact / len(bands)
-    score = _clamp(ratio * 100.0)
+    def stroke_score(patch):
+        if patch.size == 0:
+            return 50.0
+        if patch.sum() == 0:
+            return 0.0
+        dist = cv2.distanceTransform(patch, cv2.DIST_L2, 5)
+        vals = dist[dist > 0]
+        if len(vals) < 5:
+            return 50.0
+        cov = float(vals.std() / (vals.mean() + 1e-6))
+        if cov <= 0.4:
+            return 100.0
+        excess = cov - 0.4
+        return float(np.clip(100.0 * np.exp(-excess * 3), 0, 100))
+
+    def fill_score(patch):
+        if patch.size == 0:
+            return 50.0
+        ratio = float(np.count_nonzero(patch)) / patch.size
+        lo, hi = 0.05, 0.70
+        if ratio < lo:
+            return float(np.clip((ratio / lo) * 100, 0, 100))
+        elif ratio > hi:
+            excess = (ratio - hi) / (1.0 - hi + 1e-6)
+            return float(np.clip(100.0 * (1.0 - excess), 0, 100))
+        return 100.0
+
+    def sharp_score(patch):
+        if patch.size == 0:
+            return 50.0
+        lap = cv2.Laplacian(patch.astype(np.float32), cv2.CV_32F)
+        energy = float((lap ** 2).mean())
+        return float(np.clip(
+            100.0 * (1.0 - np.exp(-energy / 50.0)), 0, 100))
+
+    def zone_score(patch):
+        f = frag_score(patch)
+        s = stroke_score(patch)
+        fi = fill_score(patch)
+        sh = sharp_score(patch)
+        total = (0.35*f + 0.25*s + 0.20*fi + 0.20*sh)
+        return float(np.clip(total, 0, 100))
+
+    # ── Per-line ZIS ─────────────────────────────────────────────────
+    line_scores = []
+    for (r0, r1) in bands:
+        band_h = r1 - r0
+        if band_h < 5:
+            continue
+
+        upper_patch  = binary[r0: r0 + max(1, int(band_h * 0.20)), :]
+        shiro_patch  = binary[r0 + max(1, int(band_h * 0.20)):
+                               r0 + max(1, int(band_h * 0.35)), :]
+        middle_patch = binary[r0 + max(1, int(band_h * 0.35)):
+                               r0 + max(1, int(band_h * 0.75)), :]
+        lower_patch  = binary[r0 + max(1, int(band_h * 0.75)): r1, :]
+
+        zs_upper  = zone_score(upper_patch)
+        zs_shiro  = zone_score(shiro_patch)
+        zs_middle = zone_score(middle_patch)
+        zs_lower  = zone_score(lower_patch)
+
+        # Final ZIS formula with Pal-Chaudhuri weights
+        zis = (0.40 * zs_shiro +
+               0.30 * zs_middle +
+               0.20 * zs_upper +
+               0.10 * zs_lower)
+        line_scores.append(float(np.clip(zis, 0, 100)))
+
+    if not line_scores:
+        score = 50.0
+    else:
+        score = float(np.mean(line_scores))
+        score = float(np.clip(score, 0, 100))
+
+    status = ("Excellent" if score >= 81 else "Good" if score >= 61
+              else "Average" if score >= 41 else "Poor")
     return {
         "factor_name": "zone_integrity_score",
         "score": round(score, 1),
-        "status": _classify(score),
-        "description": f"{intact}/{len(bands)} bands have all 3 zones intact ({ratio*100:.0f}%). "
-                       + ("All character zones present." if score >= 70
-                          else "Some zone components missing." if score >= 45
-                          else "Significant zone data missing — structural integrity poor."),
-        "raw_value": round(ratio * 100, 2),
-        "unit": "% complete bands",
+        "status": status,
+        "description": f"Devanagari zone structural integrity = {score:.1f}/100. "
+                       + ("All zones intact." if score >= 70
+                          else "Some zone degradation." if score >= 45
+                          else "Significant zone damage detected."),
+        "raw_value": round(score, 2),
+        "unit": "ZIS (0-100)",
     }
-
 
 # ──────────────────────────────────────────────
 # TANUSHA — Connected Component Stability Score
@@ -499,12 +787,12 @@ def skew_penalty_score(img_bgr: np.ndarray) -> Dict[str, Any]:
 WEIGHTS = {
     "noise_score":                       0.12,
     "resolution_score":                  0.12,
-    "blur_score":                        0.16,
+    "blur_score":                        0.15,
     "contrast_score":                    0.12,
     "stroke_width_score":                0.08,
     "text_density_score":                0.08,
     "matra_continuity_score":            0.08,
-    "zone_integrity_score":              0.04,
+    "zone_integrity_score":              0.05,
     "connected_component_stability_score": 0.10,
     "skew_penalty_score":                0.10,
 }

@@ -1,4 +1,8 @@
-
+"""
+OCR Readiness Evaluation Platform
+SNLP Department — Team: Yash (Lead), Vivek, Mansi, Krish, Tanusha
+Run: streamlit run app.py
+"""
 
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
@@ -16,10 +20,8 @@ from storage import save_result, load_results, compute_correlations
 from report import generate_pdf_report
 from descriptions import get_factor_description
 from short_descriptions import get_short_description
-from api_integration import (
-    call_all_team_apis, KNOWN_ISSUES,
-    MANSI_API_URL, KRISH_API_URL, VIVEK_API_URL, TANUSHA_API_URL
-)
+from api_integration import call_all_team_apis, KNOWN_ISSUES, get_current_urls
+from config_manager import load_config, save_config, build_urls, PORTS, ENDPOINTS
 
 try:
     import pytesseract
@@ -136,39 +138,6 @@ def run_tesseract(img):
     except Exception:
         return None, None
 
-def make_radar(factor_results):
-    keys   = list(DISPLAY_NAMES.keys())
-    labels = [DISPLAY_NAMES[k] for k in keys]
-    scores = [factor_results.get(k,{}).get("score",0) for k in keys]
-    fig = go.Figure()
-    fig.add_trace(go.Scatterpolar(
-        r=scores+[scores[0]], theta=labels+[labels[0]],
-        fill="toself", fillcolor="rgba(0,196,180,0.15)",
-        line=dict(color="#00C4B4",width=2), name="Your Image",
-        marker=dict(color="#1A2B4A",size=7),
-    ))
-    fig.add_trace(go.Scatterpolar(
-        r=[70]*len(labels)+[70], theta=labels+[labels[0]],
-        fill="none",
-        line=dict(color="rgba(245,158,11,0.5)",width=1.5,dash="dot"),
-        name="Good threshold (70)",
-    ))
-    fig.update_layout(
-        polar=dict(
-            bgcolor="#F9FAFB",
-            radialaxis=dict(range=[0,100],tickfont=dict(size=9),
-                gridcolor="#E5E7EB",linecolor="#D1D5DB"),
-            angularaxis=dict(tickfont=dict(size=11,color="#374151"),
-                linecolor="#E5E7EB"),
-        ),
-        showlegend=True,
-        legend=dict(orientation="h",y=-0.15,font=dict(size=11)),
-        paper_bgcolor="rgba(0,0,0,0)",
-        margin=dict(t=20,b=20,l=40,r=40),
-        height=430,
-    )
-    return fig
-
 # ── Session state init ────────────────────────────────────────────────────────
 # This keeps the image and results alive when user switches pages
 if "analysis_done"    not in st.session_state: st.session_state.analysis_done    = False
@@ -192,6 +161,7 @@ with st.sidebar:
         "📊 History & Correlation",
         "📖 About Factors",
         "🔌 API Status",
+        "⚙️ Settings",
     ], label_visibility="collapsed")
 
     st.markdown("---")
@@ -448,29 +418,13 @@ if "🏠 Analyse Image" in nav:
         st.markdown("<br>", unsafe_allow_html=True)
 
         # ── Tabs ─────────────────────────────────
-        tab1, tab2, tab3, tab4 = st.tabs([
-            "📡 Radar Chart",
+        tab1, tab2, tab3 = st.tabs([
             "🔬 Factor Details",
             "📝 OCR Text",
             "💡 Recommendations",
         ])
 
         with tab1:
-            st.plotly_chart(make_radar(final_results), use_container_width=True)
-            fig_w = go.Figure(go.Bar(
-                x=list(DISPLAY_NAMES.values()),
-                y=[WEIGHTS[k]*100 for k in DISPLAY_NAMES],
-                marker_color="#00C4B4", opacity=0.85,
-            ))
-            fig_w.update_layout(
-                title="Factor Weights (%)", height=220,
-                paper_bgcolor="rgba(0,0,0,0)",
-                margin=dict(t=30,b=10,l=20,r=20),
-                yaxis=dict(title="Weight (%)"),
-            )
-            st.plotly_chart(fig_w, use_container_width=True)
-
-        with tab2:
             st.markdown("Click any factor to see its detailed explanation:")
             for key, display in DISPLAY_NAMES.items():
                 r      = final_results.get(key, {})
@@ -495,7 +449,7 @@ if "🏠 Analyse Image" in nav:
                         st.progress(int(min(sc, 100)))
                         st.markdown(f"<div style='text-align:center;font-size:12px;color:#6B7280;'>out of 100</div>", unsafe_allow_html=True)
 
-        with tab3:
+        with tab2:
             if ocr_conf is not None and ocr_text:
                 st.markdown(f"**Tesseract Confidence: {ocr_conf}%**")
                 st.text_area("Extracted Text", ocr_text, height=220)
@@ -505,7 +459,7 @@ if "🏠 Analyse Image" in nav:
                     "Make sure Tesseract is installed and the path is set correctly in app.py."
                 )
 
-        with tab4:
+        with tab3:
             for rec in recs:
                 is_warn = "🔧" in rec
                 box_cls = "rec-box warn" if is_warn else "rec-box"
@@ -641,16 +595,17 @@ elif "🔌 API Status" in nav:
       <p>Configuration · Live ping · Expected request & response formats</p>
     </div>""", unsafe_allow_html=True)
 
+    urls = get_current_urls()
     st.markdown("### API Configuration")
     api_map = pd.DataFrame([
         {"Member":"Vivek",   "Factors":"Stroke Width, Text Density",
-         "URL":VIVEK_API_URL,   "Method":"POST", "Field":"file", "Port":"8001"},
+         "URL":urls["vivek"],   "Method":"POST", "Field":"file", "Port":"8001"},
         {"Member":"Mansi",   "Factors":"Blur, Contrast",
-         "URL":MANSI_API_URL,   "Method":"POST", "Field":"file", "Port":"8000"},
+         "URL":urls["mansi"],   "Method":"POST", "Field":"file", "Port":"8000"},
         {"Member":"Krish",   "Factors":"Matra Continuity, Zone Integrity",
-         "URL":KRISH_API_URL,   "Method":"POST", "Field":"file", "Port":"8002"},
+         "URL":urls["krish"],   "Method":"POST", "Field":"file", "Port":"8002"},
         {"Member":"Tanusha", "Factors":"CC Stability, Skew Penalty",
-         "URL":TANUSHA_API_URL, "Method":"POST", "Field":"file", "Port":"9001"},
+         "URL":urls["tanusha"], "Method":"POST", "Field":"file", "Port":"9001"},
         {"Member":"Yash",    "Factors":"Noise, Resolution",
          "URL":"Local (built-in)", "Method":"—", "Field":"—", "Port":"—"},
     ])
@@ -661,18 +616,27 @@ elif "🔌 API Status" in nav:
     if st.button("🔄 Ping All APIs Now"):
         import requests as req
         tests = [
-            ("Vivek",   VIVEK_API_URL),
-            ("Mansi",   MANSI_API_URL),
-            ("Krish",   KRISH_API_URL),
-            ("Tanusha", TANUSHA_API_URL),
+            ("Vivek",   urls["vivek"]),
+            ("Mansi",   urls["mansi"]),
+            ("Krish",   urls["krish"]),
+            ("Tanusha", urls["tanusha"]),
         ]
         for name, url in tests:
-            base = "/".join(url.split("/")[:3])
+            # Ping the actual API endpoint directly using HEAD/GET
+            # Do NOT strip the port — keep full URL including port number
             try:
-                r = req.get(base, timeout=3)
+                r = req.get(url, timeout=5)
                 st.success(f"**{name}** ({url}): Server reachable ✅")
+            except req.exceptions.ConnectionError:
+                st.error(f"**{name}** ({url}): Unreachable ❌ — Server not running")
+            except req.exceptions.Timeout:
+                st.error(f"**{name}** ({url}): Unreachable ❌ — Connection timed out")
             except Exception as e:
-                st.error(f"**{name}** ({url}): Unreachable ❌ — {type(e).__name__}")
+                # 405/422 means server IS running but endpoint needs POST not GET — that's fine!
+                if hasattr(e, 'response') and e.response is not None:
+                    st.success(f"**{name}** ({url}): Server reachable ✅")
+                else:
+                    st.error(f"**{name}** ({url}): Unreachable ❌ — {type(e).__name__}")
 
     st.markdown("---")
     st.markdown("### Expected Response Formats")
@@ -692,3 +656,82 @@ elif "🔌 API Status" in nav:
 
     st.markdown("---")
     st.info("ℹ️ If any API is offline during analysis, the platform automatically falls back to the local algorithm for that factor.")
+
+# ════════════════════════════════════════════════
+# PAGE 5 — Settings
+# ════════════════════════════════════════════════
+elif "⚙️ Settings" in nav:
+
+    st.markdown("""
+    <div class="top-banner">
+      <h1>⚙️ Settings — Team IP Addresses</h1>
+      <p>Update your teammates' IP addresses here — no code editing needed ever again</p>
+    </div>""", unsafe_allow_html=True)
+
+    cfg = load_config()
+
+    st.markdown("### How to find a teammate's IP address")
+    st.code("ipconfig        # Windows — look for IPv4 Address\nifconfig        # Mac / Linux", language="bash")
+    st.info("📌 Ask each teammate to run the command above and send you their **IPv4 Address** (looks like 192.168.x.x)")
+
+    st.markdown("---")
+    st.markdown("### Enter IP Addresses")
+    st.markdown("Leave as `127.0.0.1` if that person is running on **your laptop**.")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**🟢 Vivek** — Port 8001 — Stroke Width & Text Density")
+        vivek_ip = st.text_input("Vivek's IP Address", value=cfg["vivek_ip"],
+                                  placeholder="e.g. 192.168.1.105")
+
+        st.markdown("**🟡 Mansi** — Port 8000 — Blur & Contrast")
+        mansi_ip = st.text_input("Mansi's IP Address", value=cfg["mansi_ip"],
+                                  placeholder="e.g. 192.168.1.108")
+
+    with col2:
+        st.markdown("**🔵 Krish** — Port 8002 — Matra & Zone Integrity")
+        krish_ip = st.text_input("Krish's IP Address", value=cfg["krish_ip"],
+                                  placeholder="e.g. 192.168.1.112")
+
+        st.markdown("**🩷 Tanusha** — Port 9001 — CC Stability & Skew")
+        tanusha_ip = st.text_input("Tanusha's IP Address", value=cfg["tanusha_ip"],
+                                    placeholder="e.g. 192.168.1.115")
+
+    st.markdown("---")
+    st.markdown("**Preview — URLs that will be used after saving:**")
+    preview = build_urls({
+        "vivek_ip": vivek_ip, "mansi_ip": mansi_ip,
+        "krish_ip": krish_ip, "tanusha_ip": tanusha_ip
+    })
+    for name, url in preview.items():
+        st.code(f"{name.capitalize()}: {url}")
+
+    if st.button("💾 Save IP Addresses", type="primary", use_container_width=True):
+        new_cfg = {
+            "vivek_ip":   vivek_ip.strip(),
+            "mansi_ip":   mansi_ip.strip(),
+            "krish_ip":   krish_ip.strip(),
+            "tanusha_ip": tanusha_ip.strip(),
+        }
+        save_config(new_cfg)
+        st.success("✅ Saved! The app will now use these IPs automatically — no restart needed.")
+
+    st.markdown("---")
+    st.markdown("### Test Connections after Saving")
+    if st.button("🔄 Test All Connections Now", use_container_width=True):
+        import requests as req
+        saved_urls = get_current_urls()
+        for name, url in saved_urls.items():
+            try:
+                r = req.get(url, timeout=5)
+                st.success(f"**{name.capitalize()}** ({url}): ✅ Reachable")
+            except req.exceptions.ConnectionError:
+                st.error(f"**{name.capitalize()}** ({url}): ❌ Server not running")
+            except req.exceptions.Timeout:
+                st.error(f"**{name.capitalize()}** ({url}): ❌ Timed out")
+            except Exception as e:
+                if hasattr(e, 'response') and e.response is not None:
+                    st.success(f"**{name.capitalize()}** ({url}): ✅ Reachable")
+                else:
+                    st.error(f"**{name.capitalize()}** ({url}): ❌ {type(e).__name__}")

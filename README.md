@@ -1,6 +1,6 @@
 # OCR Readiness Evaluation Platform
 **SNLP Department**
-Team: Yash (Lead), Vivek, Mansi, Krish
+Team: Yash (Lead), Vivek, Mansi, Krish, Tanusha
 
 ---
 
@@ -34,6 +34,7 @@ Make sure your teammates have their APIs running:
 | Vivek  | `uvicorn main:app --port 8001` | 8001 |
 | Mansi  | `uvicorn main:app --port 8000` | 8000 |
 | Krish  | `uvicorn main:app --port 8002` | 8002 |
+| Tanusha| `uvicorn main:app --port 9001` | 9001 |
 
 > If any API is offline, the platform automatically uses local fallback — it still works.
 
@@ -65,17 +66,20 @@ ocr_platform/
 | Vivek  | POST http://127.0.0.1:8001/analyze-image | stroke_width, text_density               |
 | Mansi  | POST http://localhost:8000/analyze    | blur_score, contrast_score                   |
 | Krish  | POST http://localhost:8002/scores     | matra_continuity_score, zone_integrity_score |
+| Tanusha| POST http://127.0.0.1:9001/analyze    | connected_component_stability_score, skew_penalty_score |
 
 ---
 
 ## OCR Readiness Score Weights
 | Factor              | Weight |
 |---------------------|--------|
-| Blur                | 20%    |
-| Noise               | 15%    |
-| Resolution          | 15%    |
-| Contrast            | 15%    |
-| Stroke Width        | 10%    |
-| Text Density        | 10%    |
-| Matra Continuity    | 10%    |
-| Zone Integrity      | 5%     |
+| Blur                | 15%    |
+| Noise               | 11%    |
+| Resolution          | 11%    |
+| Contrast            | 11%    |
+| CC Stability        | 9%     |
+| Skew Penalty        | 9%     |
+| Stroke Width        | 7%     |
+| Text Density        | 7%     |
+| Matra Continuity    | 7%     |
+| Zone Integrity      | 3%     |
