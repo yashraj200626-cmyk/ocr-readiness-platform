@@ -97,149 +97,112 @@ def resolution_score(img_bgr: np.ndarray) -> Dict[str, Any]:
 # ──────────────────────────────────────────────
 # MANSI —  Blur Score 
 # ──────────────────────────────────────────────
-
 def blur_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    OCR-focused blur score (0-100)
-    Uses text regions and adaptive normalization.
+    OCR blur score (0-100)
+    Works for full documents and cropped words.
     """
 
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    if len(img_bgr.shape) == 3:
+        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = img_bgr
 
-    height, width = gray.shape
+    h, w = gray.shape
 
-    # Detect text using Otsu threshold
-    _, binary = cv2.threshold(
-        gray,
-        0,
-        255,
-        cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
-    )
-
-    # Remove small noise
-    kernel = np.ones((2, 2), np.uint8)
-    binary = cv2.morphologyEx(
-        binary,
-        cv2.MORPH_OPEN,
-        kernel
-    )
-
-    # Calculate Laplacian only on text area
+    # Laplacian sharpness
     lap = cv2.Laplacian(gray, cv2.CV_64F)
-    text_pixels = lap[binary > 0]
+    lap_var = float(lap.var())
 
-    if len(text_pixels) < 100:
-        lap_var = float(lap.var())
+    # Image area adjustment
+    area = h * w
+
+    if area < 5000:
+        reference = 40      # small word crops
+    elif area < 50000:
+        reference = 80      # line/paragraph
+    elif area < 500000:
+        reference = 150     # normal document
     else:
-        lap_var = float(text_pixels.var())
+        reference = 250     # high resolution page
 
-
-    # Resolution factor
-    megapixels = (height * width) / 1_000_000
-
-
-    # Adaptive reference
-    if megapixels < 1:
-        reference = 80
-    elif megapixels < 3:
-        reference = 150
-    else:
-        reference = 250
-
-
-    # Linear scaling (more predictable)
-    score = (lap_var / reference) * 100
-
+    # Smooth normalization
+    score = 100 * (1 - np.exp(-lap_var / reference))
     score = np.clip(score, 0, 100)
-
 
     return {
         "factor_name": "blur_score",
         "score": round(float(score), 1),
         "status": _classify(score),
         "description": (
-            f"Text sharpness variance={lap_var:.1f}. "
+            f"Laplacian variance={lap_var:.1f}, region={w}x{h}. "
             + (
-                "Excellent text sharpness."
+                "Sharp text."
                 if score >= 80 else
-                "Readable with slight blur."
+                "Minor blur."
                 if score >= 60 else
-                "Noticeable blur affecting OCR."
+                "Moderate blur affecting OCR."
                 if score >= 40 else
-                "Severe blur. Retake the image."
+                "Severe blur detected."
             )
         ),
-        "raw_value": round(float(lap_var), 2),
-        "unit": "text-region Laplacian variance"
+        "raw_value": round(lap_var, 2),
+        "unit": "Laplacian variance"
     }
-
 # ──────────────────────────────────────────────
 # MANSI — Contrast Score 
 # ──────────────────────────────────────────────
 
 def contrast_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    Adaptive contrast score based on text-background separation.
-    Returns score from 0 to 100.
+    OCR contrast score (0-100)
+    Works for full documents and word crops.
     """
 
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-
-    height, width = gray.shape
-
-    # Separate text and background using Otsu threshold
-    _, binary = cv2.threshold(
-        gray,
-        0,
-        255,
-        cv2.THRESH_BINARY + cv2.THRESH_OTSU
-    )
-
-    text_pixels = gray[binary == 0]
-    background_pixels = gray[binary == 255]
-
-    if len(text_pixels) < 50 or len(background_pixels) < 50:
-        score = 0
-        contrast_value = 0
-
+    if len(img_bgr.shape) == 3:
+        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
     else:
-        text_mean = np.mean(text_pixels)
-        bg_mean = np.mean(background_pixels)
+        gray = img_bgr
 
-        # Difference between text and background
-        contrast_value = abs(bg_mean - text_mean)
+    h, w = gray.shape
 
-        # Resolution-based adjustment
-        resolution_factor = np.sqrt((height * width) / 1_000_000)
-        expected_contrast = 50 + (resolution_factor * 20)
+    # Use percentile spread (more stable for small crops)
+    p5 = float(np.percentile(gray, 5))
+    p95 = float(np.percentile(gray, 95))
 
-        # Exponential normalization
-        score = 100 * (
-            1 - np.exp(-contrast_value / expected_contrast)
-        )
-        score = _clamp(score)
+    contrast = p95 - p5
+
+    area = h * w
+
+    if area < 5000:
+        reference = 60
+    elif area < 50000:
+        reference = 90
+    else:
+        reference = 120
+
+    score = 100 * (contrast / reference)
+    score = np.clip(score, 0, 100)
 
     return {
         "factor_name": "contrast_score",
-        "score": round(score, 1),
+        "score": round(float(score), 1),
         "status": _classify(score),
         "description": (
-            f"Contrast difference={contrast_value:.1f}, "
-            f"image size={width}x{height}. "
+            f"Contrast range={contrast:.1f}, region={w}x{h}. "
             + (
-                "Excellent contrast — text clearly separated."
+                "Excellent contrast."
                 if score >= 80 else
-                "Good contrast for OCR."
+                "Good contrast."
                 if score >= 60 else
-                "Moderate contrast — enhancement may help."
+                "Moderate contrast."
                 if score >= 40 else
-                "Low contrast — improve lighting or processing."
+                "Low contrast affecting OCR."
             )
         ),
-        "raw_value": round(float(contrast_value), 2),
-        "unit": "text-background intensity difference",
+        "raw_value": round(contrast, 2),
+        "unit": "Intensity range"
     }
-
 
 # ──────────────────────────────────────────────
 # VIVEK — Stroke Width Score
