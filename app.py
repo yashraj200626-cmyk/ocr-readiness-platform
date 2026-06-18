@@ -7,6 +7,10 @@ Run: streamlit run app.py
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 
+if sys.platform.startswith("win"):
+    import asyncio
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
