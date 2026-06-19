@@ -95,60 +95,80 @@ def resolution_score(img_bgr: np.ndarray) -> Dict[str, Any]:
 
 
 # ──────────────────────────────────────────────
-# MANSI — Blur Score
+# MANSI —  Blur Score 
 # ──────────────────────────────────────────────
-
 def blur_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    Variance of Laplacian method.
-    A sharp image has high edge variance; a blurry one is low.
-    Score = clamp(var_laplacian / 5, 0, 100)
-    Threshold tuned for typical document scans (var ~50–500).
+    Calculate text sharpness using Laplacian variance.
+    Works for document, line, or word images.
     """
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    lap = cv2.Laplacian(gray, cv2.CV_64F)
-    var_lap = float(lap.var())
-    score = _clamp(var_lap / 5.0)
+
+    if len(img_bgr.shape) == 3:
+        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = img_bgr
+
+    # Edge sharpness
+    lap_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+
+    # Normalize to 0-100
+    score = min((lap_var / 300) * 100, 100)
+
     return {
         "factor_name": "blur_score",
-        "score": round(score, 1),
+        "score": round(float(score), 1),
         "status": _classify(score),
-        "description": f"Laplacian variance = {var_lap:.1f}. "
-                       + ("Sharp image — good edge definition." if score >= 70
-                          else "Slight blur present." if score >= 45
-                          else "Blurry image — improve camera focus."),
-        "raw_value": round(var_lap, 2),
-        "unit": "Laplacian variance",
+        "description": (
+            f"Sharpness value = {lap_var:.1f}. "
+            + (
+                "Text is sharp and clear."
+                if score >= 75 else
+                "Slight blur detected."
+                if score >= 45 else
+                "Image is blurry and may affect OCR."
+            )
+        ),
+        "raw_value": round(float(lap_var), 2),
+        "unit": "Laplacian variance"
     }
-
-
-# ──────────────────────────────────────────────
-# MANSI — Contrast Score
-# ──────────────────────────────────────────────
 
 def contrast_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    Histogram spread method.
-    Contrast = (p95 − p5) of the pixel intensity histogram.
-    Score = clamp((p95 − p5) / 2.55, 0, 100)
+    Calculate text contrast using intensity distribution.
+    Works for document and word regions.
     """
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    p5 = float(np.percentile(gray, 5))
-    p95 = float(np.percentile(gray, 95))
-    spread = p95 - p5
-    score = _clamp(spread / 2.55)
+
+    if len(img_bgr.shape) == 3:
+        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = img_bgr
+
+    # Ignore extreme values
+    p5 = np.percentile(gray, 5)
+    p95 = np.percentile(gray, 95)
+
+    contrast = p95 - p5
+
+    # Normalize to 0-100
+    score = min((contrast / 150) * 100, 100)
+
     return {
         "factor_name": "contrast_score",
-        "score": round(score, 1),
+        "score": round(float(score), 1),
         "status": _classify(score),
-        "description": f"Intensity range p5={p5:.0f} → p95={p95:.0f} (spread={spread:.0f}/255). "
-                       + ("High contrast — text clearly distinguishable." if score >= 70
-                          else "Moderate contrast." if score >= 45
-                          else "Low contrast — apply thresholding or brightness adjustment."),
-        "raw_value": round(spread, 2),
-        "unit": "intensity spread (0-255)",
+        "description": (
+            f"Contrast difference = {contrast:.1f}. "
+            + (
+                "Text and background are clearly separated."
+                if score >= 75 else
+                "Moderate contrast."
+                if score >= 45 else
+                "Low contrast and OCR may fail."
+            )
+        ),
+        "raw_value": round(float(contrast), 2),
+        "unit": "Intensity difference"
     }
-
 
 # ──────────────────────────────────────────────
 # VIVEK — Stroke Width Score
