@@ -85,7 +85,10 @@ def load_results() -> Optional[pd.DataFrame]:
         header_line = ",".join(COLUMNS)
 
     csv_text = "\n".join([header_line, *cleaned_lines])
-    df = pd.read_csv(StringIO(csv_text))
+    df = pd.read_csv(
+    StringIO(csv_text),
+    on_bad_lines='skip'
+)
     df.columns = [str(col).strip() for col in df.columns]
     if df.empty:
         return None
