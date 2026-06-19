@@ -99,8 +99,8 @@ def resolution_score(img_bgr: np.ndarray) -> Dict[str, Any]:
 # ──────────────────────────────────────────────
 def blur_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    OCR blur score (0-100)
-    Works for full documents and cropped words.
+    Calculate text sharpness using Laplacian variance.
+    Works for document, line, or word images.
     """
 
     if len(img_bgr.shape) == 3:
@@ -108,55 +108,34 @@ def blur_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     else:
         gray = img_bgr
 
-    h, w = gray.shape
+    # Edge sharpness
+    lap_var = cv2.Laplacian(gray, cv2.CV_64F).var()
 
-    # Laplacian sharpness
-    lap = cv2.Laplacian(gray, cv2.CV_64F)
-    lap_var = float(lap.var())
-
-    # Image area adjustment
-    area = h * w
-
-    if area < 5000:
-        reference = 40      # small word crops
-    elif area < 50000:
-        reference = 80      # line/paragraph
-    elif area < 500000:
-        reference = 150     # normal document
-    else:
-        reference = 250     # high resolution page
-
-    # Smooth normalization
-    score = 100 * (1 - np.exp(-lap_var / reference))
-    score = np.clip(score, 0, 100)
+    # Normalize to 0-100
+    score = min((lap_var / 300) * 100, 100)
 
     return {
         "factor_name": "blur_score",
         "score": round(float(score), 1),
         "status": _classify(score),
         "description": (
-            f"Laplacian variance={lap_var:.1f}, region={w}x{h}. "
+            f"Sharpness value = {lap_var:.1f}. "
             + (
-                "Sharp text."
-                if score >= 80 else
-                "Minor blur."
-                if score >= 60 else
-                "Moderate blur affecting OCR."
-                if score >= 40 else
-                "Severe blur detected."
+                "Text is sharp and clear."
+                if score >= 75 else
+                "Slight blur detected."
+                if score >= 45 else
+                "Image is blurry and may affect OCR."
             )
         ),
-        "raw_value": round(lap_var, 2),
+        "raw_value": round(float(lap_var), 2),
         "unit": "Laplacian variance"
     }
-# ──────────────────────────────────────────────
-# MANSI — Contrast Score 
-# ──────────────────────────────────────────────
 
 def contrast_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    OCR contrast score (0-100)
-    Works for full documents and word crops.
+    Calculate text contrast using intensity distribution.
+    Works for document and word regions.
     """
 
     if len(img_bgr.shape) == 3:
@@ -164,44 +143,31 @@ def contrast_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     else:
         gray = img_bgr
 
-    h, w = gray.shape
-
-    # Use percentile spread (more stable for small crops)
-    p5 = float(np.percentile(gray, 5))
-    p95 = float(np.percentile(gray, 95))
+    # Ignore extreme values
+    p5 = np.percentile(gray, 5)
+    p95 = np.percentile(gray, 95)
 
     contrast = p95 - p5
 
-    area = h * w
-
-    if area < 5000:
-        reference = 60
-    elif area < 50000:
-        reference = 90
-    else:
-        reference = 120
-
-    score = 100 * (contrast / reference)
-    score = np.clip(score, 0, 100)
+    # Normalize to 0-100
+    score = min((contrast / 150) * 100, 100)
 
     return {
         "factor_name": "contrast_score",
         "score": round(float(score), 1),
         "status": _classify(score),
         "description": (
-            f"Contrast range={contrast:.1f}, region={w}x{h}. "
+            f"Contrast difference = {contrast:.1f}. "
             + (
-                "Excellent contrast."
-                if score >= 80 else
-                "Good contrast."
-                if score >= 60 else
+                "Text and background are clearly separated."
+                if score >= 75 else
                 "Moderate contrast."
-                if score >= 40 else
-                "Low contrast affecting OCR."
+                if score >= 45 else
+                "Low contrast and OCR may fail."
             )
         ),
-        "raw_value": round(contrast, 2),
-        "unit": "Intensity range"
+        "raw_value": round(float(contrast), 2),
+        "unit": "Intensity difference"
     }
 
 # ──────────────────────────────────────────────
