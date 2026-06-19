@@ -4,6 +4,7 @@ CSV storage and correlation analysis for OCR Readiness Platform.
 
 import csv
 import os
+from io import StringIO
 from datetime import datetime
 from typing import Dict, Any, Optional
 import pandas as pd
@@ -67,7 +68,25 @@ def save_result(
 def load_results() -> Optional[pd.DataFrame]:
     if not os.path.isfile(CSV_PATH):
         return None
-    df = pd.read_csv(CSV_PATH)
+    with open(CSV_PATH, "r", encoding="utf-8") as f:
+        raw_lines = [line.strip() for line in f if line.strip()]
+
+    cleaned_lines = []
+    header_line = None
+    for line in raw_lines:
+        if line.startswith("<<<") or line.startswith("===") or line.startswith(">>>"):
+            continue
+        if line == ",".join(COLUMNS):
+            header_line = line
+            continue
+        cleaned_lines.append(line)
+
+    if header_line is None:
+        header_line = ",".join(COLUMNS)
+
+    csv_text = "\n".join([header_line, *cleaned_lines])
+    df = pd.read_csv(StringIO(csv_text))
+    df.columns = [str(col).strip() for col in df.columns]
     if df.empty:
         return None
     return df
@@ -76,6 +95,9 @@ def load_results() -> Optional[pd.DataFrame]:
 def compute_correlations() -> Optional[pd.Series]:
     df = load_results()
     if df is None:
+        return None
+    required_cols = set(FACTOR_COLS + ["ocr_confidence"])
+    if not required_cols.issubset(df.columns):
         return None
     df = df.dropna(subset=["ocr_confidence"])
     if len(df) < 3:
