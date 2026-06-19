@@ -59,3 +59,4 @@ timestamp,image_name,noise_score,resolution_score,blur_score,contrast_score,stro
 2026-06-18 22:35:19,hindi_high_res_1.png,67.0,100.0,100.0,100.0,87.7,66.6,64.0,73.2,14.9,100.0,79.7,22.6
 >>>>>>> 6fffb292aaa71a9876dba3bd2854f6f317a79bb7
 >>>>>>> f5e6b8438b8fae968d00e6b9919dc9e55999b26b
+2026-06-19 11:51:37,blur_image.png,80.4,13.2,100.0,60.0,87.7,59.3,96.3,51.4,31.0,100.0,68.6,
