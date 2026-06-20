@@ -37,34 +37,56 @@ def _clamp(v: float, lo=0.0, hi=100.0) -> float:
 
 
 # ──────────────────────────────────────────────
-# YASH — Noise Score
+# YASH — Noise Score (FIXED)
 # ──────────────────────────────────────────────
 
 def noise_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    Estimates image noise using the high-frequency residual method.
-    A Gaussian-blurred copy is subtracted from the original; the
-    standard deviation of the residual is the noise estimate.
-    Score = 100 − clamp(noise_std / 0.5, 0, 100)
+    Estimates image noise using the high-frequency residual method,
+    but ONLY measures it in flat/background regions — areas with no
+    nearby text edges. This prevents dense, sharp text (which has
+    naturally high edge-residual variance) from being misread as noise.
+
+    Method:
+      1. Detect edges (text strokes) via Canny.
+      2. Dilate the edge mask to exclude a margin around every stroke.
+      3. Compute Gaussian-blur residual, but only sample pixels in the
+         remaining "flat" background area.
+      4. std(residual in flat area) = true noise estimate.
+
+    Score = clamp(100 − noise_std / 0.30, 0, 100)
+    Calibration: clean scans have flat-region noise_std ~0-8;
+    heavy scan/sensor noise pushes it to 15-30+.
     """
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+
+    # Exclude text-edge regions so they aren't counted as "noise"
+    edges = cv2.Canny(gray.astype(np.uint8), 50, 150)
+    edges_dilated = cv2.dilate(edges, np.ones((7, 7), np.uint8))
+    flat_mask = edges_dilated == 0
+
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     residual = gray - blurred
-    noise_std = float(np.std(residual))
-    # Typical noise_std: 0 = perfect, ~50 = very noisy
-    score = _clamp(100.0 - (noise_std / 0.50))
+
+    flat_residual = residual[flat_mask]
+    if flat_residual.size < 50:
+        # Fallback for images that are almost entirely text/edges
+        noise_std = float(np.std(residual))
+    else:
+        noise_std = float(np.std(flat_residual))
+
+    score = _clamp(100.0 - (noise_std / 0.30))
     return {
         "factor_name": "noise_score",
         "score": round(score, 1),
         "status": _classify(score),
-        "description": f"Estimated noise σ = {noise_std:.2f}. "
+        "description": f"Estimated background noise σ = {noise_std:.2f}. "
                        + ("Low noise — good OCR candidate." if score >= 70
                           else "Moderate noise detected." if score >= 45
                           else "High noise — apply denoising filter."),
         "raw_value": round(noise_std, 3),
-        "unit": "σ (std of residual)",
+        "unit": "σ (std of residual, flat regions only)",
     }
-
 
 # ──────────────────────────────────────────────
 # YASH — Resolution Score
@@ -228,7 +250,7 @@ def contrast_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     ) * 100
 
     score = float(np.clip(score, 0, 100))
-    
+
     return {
         "factor_name": "contrast_score",
         "score": round(score, 1),
