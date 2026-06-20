@@ -59,6 +59,33 @@ try:
                 return candidate
         return None
 
+    def _find_tessdata_prefix():
+        env_prefix = os.environ.get("TESSDATA_PREFIX")
+        candidates = [env_prefix] if env_prefix else []
+        candidates.extend([
+            "C:\\Program Files\\Tesseract-OCR\\",
+            "C:\\Program Files\\tessdata\\",
+            "C:\\Program Files (x86)\\Tesseract-OCR\\",
+            "C:\\Program Files (x86)\\tessdata\\",
+        ])
+
+        for candidate in candidates:
+            if not candidate:
+                continue
+            normalized = os.path.normpath(candidate)
+            if os.path.isfile(os.path.join(normalized, "tessdata", "hin.traineddata")):
+                return os.path.join(normalized, "tessdata")
+            if os.path.isfile(os.path.join(normalized, "hin.traineddata")):
+                return normalized
+        return None
+
+    TESSDATA_PREFIX = _find_tessdata_prefix()
+    if TESSDATA_PREFIX:
+        os.environ["TESSDATA_PREFIX"] = TESSDATA_PREFIX
+        OCR_LANG = "hin+eng"
+    else:
+        OCR_LANG = "eng"
+
     tesseract_cmd = _find_tesseract_cmd()
     if tesseract_cmd:
         pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
@@ -166,7 +193,11 @@ def run_tesseract(img):
     if not TESSERACT_OK:
         return None, None
     try:
-        data  = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+        data = pytesseract.image_to_data(
+            img,
+            lang=OCR_LANG,
+            output_type=pytesseract.Output.DICT,
+        )
         confs = []
         for c in data.get("conf", []):
             try:
@@ -176,9 +207,9 @@ def run_tesseract(img):
             if conf >= 0:
                 confs.append(conf)
         if confs:
-            return round(float(np.mean(confs)),1), pytesseract.image_to_string(img)
+            return round(float(np.mean(confs)), 1), pytesseract.image_to_string(img, lang=OCR_LANG)
         return None, None
-    except Exception:
+    except Exception as e:
         return None, None
 
 # ── Session state init ────────────────────────────────────────────────────────

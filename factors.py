@@ -72,83 +72,190 @@ def noise_score(img_bgr: np.ndarray) -> Dict[str, Any]:
 
 def resolution_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    Evaluates pixel dimensions for OCR suitability.
-    OCR works best at ≥300 DPI equivalent; heuristic: images ≥1500px
-    on the long side score 100, images <200px score 0.
-    Score = clamp((long_side − 200) / 13, 0, 100)
+    Evaluates image resolution for OCR suitability.
+
+    Assumption:
+        OCR quality improves as image dimensions increase.
+
+    Heuristic:
+        Long side <= 300 px   -> unusable
+        Long side >= 2000 px  -> excellent
+
+    Score is linearly normalized between these limits.
     """
+
     h, w = img_bgr.shape[:2]
+
     long_side = max(h, w)
-    score = _clamp((long_side - 200) / 13.0)
+
     mp = (h * w) / 1_000_000
+
+    min_px = 300
+    max_px = 2000
+
+    score = _clamp(
+        100.0 * (long_side - min_px) / (max_px - min_px)
+    )
+
     return {
         "factor_name": "resolution_score",
         "score": round(score, 1),
         "status": _classify(score),
-        "description": f"{w}×{h} px ({mp:.2f} MP). "
-                       + ("High resolution — text should be sharp." if score >= 70
-                          else "Moderate resolution." if score >= 45
-                          else "Low resolution — capture at higher DPI."),
+        "description":
+            f"{w}×{h} px ({mp:.2f} MP). "
+            + (
+                "High resolution — text should be sharp."
+                if score >= 70 else
+                "Moderate resolution."
+                if score >= 45 else
+                "Low resolution — capture at higher DPI."
+            ),
         "raw_value": long_side,
         "unit": "px (long side)",
     }
 
+def _classify(score: float) -> str:
+    """
+    OCR quality classification
+    """
+    if score >= 70:
+        return "Good"
+    elif score >= 35:
+        return "Moderate"
+    else:
+        return "Poor"
+
 
 # ──────────────────────────────────────────────
-# MANSI — Blur Score
+# Blur Score (OCR calibrated)
 # ──────────────────────────────────────────────
-
 def blur_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    Variance of Laplacian method.
-    A sharp image has high edge variance; a blurry one is low.
-    Score = clamp(var_laplacian / 5, 0, 100)
-    Threshold tuned for typical document scans (var ~50–500).
+    Measure text sharpness using Laplacian variance.
+    Higher score = sharper text.
     """
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    lap = cv2.Laplacian(gray, cv2.CV_64F)
-    var_lap = float(lap.var())
-    score = _clamp(var_lap / 5.0)
+
+    if img_bgr is None or img_bgr.size == 0:
+        return {
+            "factor_name": "blur_score",
+            "score": 0,
+            "status": "Poor",
+            "description": "No image data available.",
+            "raw_value": 0,
+            "unit": "Laplacian variance"
+        }
+
+    # Convert to grayscale
+    if img_bgr.ndim == 3:
+        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = img_bgr.copy()
+
+    # Slight denoising to avoid noise creating fake edges
+    gray = cv2.GaussianBlur(gray, (3, 3), 0)
+
+    # Calculate edge strength
+    lap_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+
+    # Better scaling for documents
+    # 0–20   : very blurry
+    # 20–100 : moderate blur
+    # 100+   : sharp text
+    score = (
+        (np.log1p(lap_var) - np.log1p(3)) /
+        (np.log1p(600) - np.log1p(3))
+    ) * 100
+
+    score = float(np.clip(score, 0, 100))
+
     return {
         "factor_name": "blur_score",
         "score": round(score, 1),
         "status": _classify(score),
-        "description": f"Laplacian variance = {var_lap:.1f}. "
-                       + ("Sharp image — good edge definition." if score >= 70
-                          else "Slight blur present." if score >= 45
-                          else "Blurry image — improve camera focus."),
-        "raw_value": round(var_lap, 2),
-        "unit": "Laplacian variance",
+        "description": (
+            f"Laplacian variance = {lap_var:.2f}. " +
+            (
+                "Text edges are sharp and OCR readability is high."
+                if score >= 70 else
+                "Some blur is present. OCR may have minor errors."
+                if score >= 35 else
+                "Heavy blur detected. OCR accuracy may be poor."
+            )
+        ),
+        "raw_value": round(lap_var, 2),
+        "unit": "Laplacian variance"
     }
 
 
 # ──────────────────────────────────────────────
-# MANSI — Contrast Score
+# Contrast Score (OCR calibrated)
 # ──────────────────────────────────────────────
-
 def contrast_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    Histogram spread method.
-    Contrast = (p95 − p5) of the pixel intensity histogram.
-    Score = clamp((p95 − p5) / 2.55, 0, 100)
+    Measure text and background separation.
+    Higher score = better contrast.
     """
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+
+    if img_bgr is None or img_bgr.size == 0:
+        return {
+            "factor_name": "contrast_score",
+            "score": 0,
+            "status": "Poor",
+            "description": "No image data available.",
+            "raw_value": 0,
+            "unit": "Intensity difference"
+        }
+
+    # Convert to grayscale
+    if img_bgr.ndim == 3:
+        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = img_bgr.copy()
+
+    # Use robust intensity range
     p5 = float(np.percentile(gray, 5))
     p95 = float(np.percentile(gray, 95))
-    spread = p95 - p5
-    score = _clamp(spread / 2.55)
+
+    contrast = p95 - p5
+
+    # Wider contrast range for scanned documents
+    # < 40  : low contrast
+    # 40-120: moderate
+    # >120  : good
+    score = (
+        (contrast - 15) /
+        (220 - 15)
+    ) * 100
+
+    score = float(np.clip(score, 0, 100))
+
     return {
         "factor_name": "contrast_score",
         "score": round(score, 1),
         "status": _classify(score),
-        "description": f"Intensity range p5={p5:.0f} → p95={p95:.0f} (spread={spread:.0f}/255). "
-                       + ("High contrast — text clearly distinguishable." if score >= 70
-                          else "Moderate contrast." if score >= 45
-                          else "Low contrast — apply thresholding or brightness adjustment."),
-        "raw_value": round(spread, 2),
-        "unit": "intensity spread (0-255)",
+        "description": (
+<<<<<<< HEAD
+            f"Contrast differdence = {contrast:.1f}. "
+            + (
+                "Text and background are clearly separated."
+                if score >= 75 else
+                "Moderate contrast."
+                if score >= 45 else
+                "Low contrast and OCR may fail."
+=======
+            f"Intensity difference = {contrast:.2f}. " +
+            (
+                "Strong text and background separation."
+                if score >= 70 else
+                "Moderate contrast. OCR should work with some limitations."
+                if score >= 35 else
+                "Low contrast. Text may blend into the background."
+>>>>>>> fc2422c (moderate)
+            )
+        ),
+        "raw_value": round(contrast, 2),
+        "unit": "Intensity difference"
     }
-
 
 # ──────────────────────────────────────────────
 # VIVEK — Stroke Width Score
