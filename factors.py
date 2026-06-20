@@ -228,34 +228,25 @@ def contrast_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     ) * 100
 
     score = float(np.clip(score, 0, 100))
-
+    
     return {
         "factor_name": "contrast_score",
         "score": round(score, 1),
         "status": _classify(score),
         "description": (
-<<<<<<< HEAD
-            f"Contrast differdence = {contrast:.1f}. "
+            f"Contrast difference = {contrast:.1f}. "
             + (
                 "Text and background are clearly separated."
                 if score >= 75 else
                 "Moderate contrast."
                 if score >= 45 else
                 "Low contrast and OCR may fail."
-=======
-            f"Intensity difference = {contrast:.2f}. " +
-            (
-                "Strong text and background separation."
-                if score >= 70 else
-                "Moderate contrast. OCR should work with some limitations."
-                if score >= 35 else
-                "Low contrast. Text may blend into the background."
->>>>>>> fc2422c (moderate)
             )
         ),
         "raw_value": round(contrast, 2),
         "unit": "Intensity difference"
     }
+    
 
 # ──────────────────────────────────────────────
 # VIVEK — Stroke Width Score
