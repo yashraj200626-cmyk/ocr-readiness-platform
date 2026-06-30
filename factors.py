@@ -39,92 +39,152 @@ def _clamp(v: float, lo=0.0, hi=100.0) -> float:
 # ──────────────────────────────────────────────
 # YASH — Noise Score
 # ──────────────────────────────────────────────
-
+# ------------------------------------------------
+# Noise Score (OCR Calibrated)
+# ------------------------------------------------
 def noise_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    Estimates image noise using the high-frequency residual method.
-    A Gaussian-blurred copy is subtracted from the original; the
-    standard deviation of the residual is the noise estimate.
-    Score = 100 − clamp(noise_std / 0.5, 0, 100)
+    Estimates random image noise.
+
+    Method:
+    1. Convert image to grayscale.
+    2. Apply Gaussian blur to create a smooth version.
+    3. Find difference between original and smoothed image.
+    4. Ignore strong edges to avoid treating text as noise.
+    5. Convert noise value into a 0–100 OCR score.
+
+    Higher score = cleaner image.
     """
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+
+    # Validate image
+    if img_bgr is None or img_bgr.size == 0:
+        return {
+            "factor_name": "noise_score",
+            "score": 0,
+            "status": "Poor",
+            "description": "No image data available.",
+            "raw_value": 0,
+            "unit": "Noise level"
+        }
+
+    # Convert to grayscale
+    if img_bgr.ndim == 3:
+        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = img_bgr.copy()
+
+    # Smooth image
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    residual = gray - blurred
-    noise_std = float(np.std(residual))
-    # Typical noise_std: 0 = perfect, ~50 = very noisy
-    score = _clamp(100.0 - (noise_std / 0.50))
+
+    # Difference image (contains noise + edges)
+    residual = cv2.absdiff(gray, blurred)
+
+    # Detect strong text edges
+    edges = cv2.Canny(gray, 80, 150)
+
+    # Remove text edge regions from noise calculation
+    background_mask = edges == 0
+
+    # If very few background pixels exist, use full image
+    if np.sum(background_mask) > 100:
+        noise_value = float(np.mean(residual[background_mask]))
+    else:
+        noise_value = float(np.mean(residual))
+
+    # OCR-based calibration
+    # 0   -> perfect
+    # 25+ -> extremely noisy
+    score = 100 - (noise_value * 4)
+
+    # Keep score within 0–100
+    score = float(np.clip(score, 0, 100))
+
     return {
         "factor_name": "noise_score",
         "score": round(score, 1),
         "status": _classify(score),
-        "description": f"Estimated noise σ = {noise_std:.2f}. "
-                       + ("Low noise — good OCR candidate." if score >= 70
-                          else "Moderate noise detected." if score >= 45
-                          else "High noise — apply denoising filter."),
-        "raw_value": round(noise_std, 3),
-        "unit": "σ (std of residual)",
+        "description":
+            f"Estimated noise level = {noise_value:.2f}. " +
+            (
+                "Low noise detected. Image is suitable for OCR."
+                if score >= 70 else
+                "Moderate noise detected. OCR may require preprocessing."
+                if score >= 35 else
+                "High noise detected. Apply denoising before OCR."
+            ),
+        "raw_value": round(noise_value, 2),
+        "unit": "Average residual intensity"
     }
 
 
-# ──────────────────────────────────────────────
-# YASH — Resolution Score
-# ──────────────────────────────────────────────
-
+# ------------------------------------------------
+# Resolution Score (OCR Calibrated)
+# ------------------------------------------------
 def resolution_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    Evaluates image resolution for OCR suitability.
+    Evaluates image resolution for OCR.
 
-    Assumption:
-        OCR quality improves as image dimensions increase.
+    Uses total image pixels (megapixels)
+    instead of only one dimension.
 
-    Heuristic:
-        Long side <= 300 px   -> unusable
-        Long side >= 2000 px  -> excellent
-
-    Score is linearly normalized between these limits.
+    Higher score = more character detail.
     """
 
-    h, w = img_bgr.shape[:2]
+    # Validate image
+    if img_bgr is None or img_bgr.size == 0:
+        return {
+            "factor_name": "resolution_score",
+            "score": 0,
+            "status": "Poor",
+            "description": "No image data available.",
+            "raw_value": 0,
+            "unit": "Megapixels"
+        }
 
-    long_side = max(h, w)
+    # Get image size
+    height, width = img_bgr.shape[:2]
 
-    mp = (h * w) / 1_000_000
+    # Calculate megapixels
+    megapixels = (height * width) / 1_000_000
 
-    min_px = 300
-    max_px = 2000
 
-    score = _clamp(
-        100.0 * (long_side - min_px) / (max_px - min_px)
-    )
+    # OCR resolution calibration
+    if megapixels >= 2.0:
+        score = 100
+
+    elif megapixels >= 1.0:
+        # 1–2 MP → 70–100 score
+        score = 70 + ((megapixels - 1.0) * 30)
+
+    elif megapixels >= 0.3:
+        # 0.3–1 MP → 35–70 score
+        score = 35 + ((megapixels - 0.3) / 0.7) * 35
+
+    else:
+        # Very low resolution
+        score = (megapixels / 0.3) * 35
+
+
+    score = float(np.clip(score, 0, 100))
+
 
     return {
         "factor_name": "resolution_score",
         "score": round(score, 1),
         "status": _classify(score),
         "description":
-            f"{w}×{h} px ({mp:.2f} MP). "
-            + (
-                "High resolution — text should be sharp."
+            f"Image size = {width} × {height} pixels "
+            f"({megapixels:.2f} MP). " +
+            (
+                "High resolution with sufficient text details."
                 if score >= 70 else
-                "Moderate resolution."
-                if score >= 45 else
-                "Low resolution — capture at higher DPI."
+                "Moderate resolution. OCR may have minor issues."
+                if score >= 35 else
+                "Low resolution. Capture a higher-quality image."
             ),
-        "raw_value": long_side,
-        "unit": "px (long side)",
+        "raw_value": round(megapixels, 2),
+        "unit": "Megapixels"
     }
-
-def _classify(score: float) -> str:
-    """
-    OCR quality classification
-    """
-    if score >= 70:
-        return "Good"
-    elif score >= 35:
-        return "Moderate"
-    else:
-        return "Poor"
-
 
 # ──────────────────────────────────────────────
 # Blur Score (OCR calibrated)
@@ -186,14 +246,14 @@ def blur_score(img_bgr: np.ndarray) -> Dict[str, Any]:
         "unit": "Laplacian variance"
     }
 
-
 # ──────────────────────────────────────────────
 # Contrast Score (OCR calibrated)
 # ──────────────────────────────────────────────
 def contrast_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     """
-    Measure text and background separation.
-    Higher score = better contrast.
+    OCR-aware contrast score.
+    Measures text/background separation and adjusts for low resolution.
+    Higher score = better OCR readability.
     """
 
     if img_bgr is None or img_bgr.size == 0:
@@ -212,45 +272,48 @@ def contrast_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     else:
         gray = img_bgr.copy()
 
-    # Use robust intensity range
+    h, w = gray.shape
+    pixels = h * w
+
+    # Robust contrast using percentiles
     p5 = float(np.percentile(gray, 5))
     p95 = float(np.percentile(gray, 95))
-
     contrast = p95 - p5
 
-    # Wider contrast range for scanned documents
-    # < 40  : low contrast
-    # 40-120: moderate
-    # >120  : good
-    score = (
-        (contrast - 15) /
-        (220 - 15)
-    ) * 100
+    # Normalize contrast to 0-100
+    # 20 = very poor, 180 = excellent
+    base_score = ((contrast - 20) / (180 - 20)) * 100
+    base_score = float(np.clip(base_score, 0, 100))
 
-    score = float(np.clip(score, 0, 100))
+    # --------------------------------------------------
+    # Resolution penalty for OCR
+    # Small images lose character details
+    # --------------------------------------------------
+    if pixels >= 1_000_000:
+        res_factor = 1.0      # High resolution
+    elif pixels >= 500_000:
+        res_factor = 0.90
+    elif pixels >= 250_000:
+        res_factor = 0.80
+    else:
+        res_factor = 0.70     # Very small documents
+
+    # Keep some contrast credit even for low resolution
+    final_score = base_score * (0.5 + 0.5 * res_factor)
+    final_score = float(np.clip(final_score, 0, 100))
 
     return {
         "factor_name": "contrast_score",
-        "score": round(score, 1),
-        "status": _classify(score),
+        "score": round(final_score, 1),
+        "status": _classify(final_score),
         "description": (
-<<<<<<< HEAD
-            f"Contrast differdence = {contrast:.1f}. "
+            f"Contrast difference = {contrast:.1f}. "
             + (
-                "Text and background are clearly separated."
-                if score >= 75 else
-                "Moderate contrast."
-                if score >= 45 else
-                "Low contrast and OCR may fail."
-=======
-            f"Intensity difference = {contrast:.2f}. " +
-            (
-                "Strong text and background separation."
-                if score >= 70 else
-                "Moderate contrast. OCR should work with some limitations."
-                if score >= 35 else
-                "Low contrast. Text may blend into the background."
->>>>>>> fc2422c (moderate)
+                "Excellent text/background separation."
+                if final_score >= 80 else
+                "Moderate contrast suitable for OCR."
+                if final_score >= 50 else
+                "Low contrast; OCR accuracy may decrease."
             )
         ),
         "raw_value": round(contrast, 2),

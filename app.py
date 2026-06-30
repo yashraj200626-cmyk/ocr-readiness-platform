@@ -80,11 +80,19 @@ try:
         return None
 
     TESSDATA_PREFIX = _find_tessdata_prefix()
+    OCR_LANG_OPTIONS = ["eng"]
+    OCR_LANG_DEFAULT = "eng"
+
     if TESSDATA_PREFIX:
         os.environ["TESSDATA_PREFIX"] = TESSDATA_PREFIX
-        OCR_LANG = "hin+eng"
-    else:
-        OCR_LANG = "eng"
+        if os.path.isfile(os.path.join(TESSDATA_PREFIX, "hin.traineddata")):
+            OCR_LANG_OPTIONS = ["hin+eng", "hin", "eng"]
+            OCR_LANG_DEFAULT = "hin+eng"
+        else:
+            OCR_LANG_OPTIONS = ["eng"]
+            OCR_LANG_DEFAULT = "eng"
+
+    OCR_LANG = OCR_LANG_DEFAULT
 
     tesseract_cmd = _find_tesseract_cmd()
     if tesseract_cmd:
@@ -189,13 +197,15 @@ def score_color(s):
     if s >= 41: return "#F59E0B"
     return "#EF4444"
 
-def run_tesseract(img):
+def run_tesseract(img, lang=None):
     if not TESSERACT_OK:
         return None, None
+    if lang is None:
+        lang = OCR_LANG
     try:
         data = pytesseract.image_to_data(
             img,
-            lang=OCR_LANG,
+            lang=lang,
             output_type=pytesseract.Output.DICT,
         )
         confs = []
@@ -207,9 +217,9 @@ def run_tesseract(img):
             if conf >= 0:
                 confs.append(conf)
         if confs:
-            return round(float(np.mean(confs)), 1), pytesseract.image_to_string(img, lang=OCR_LANG)
+            return round(float(np.mean(confs)), 1), pytesseract.image_to_string(img, lang=lang)
         return None, None
-    except Exception as e:
+    except Exception:
         return None, None
 
 # ── Session state init ────────────────────────────────────────────────────────
@@ -219,6 +229,7 @@ if "final_results"    not in st.session_state: st.session_state.final_results   
 if "api_status"       not in st.session_state: st.session_state.api_status       = {}
 if "ocr_conf"         not in st.session_state: st.session_state.ocr_conf         = None
 if "ocr_text"         not in st.session_state: st.session_state.ocr_text         = ""
+if "ocr_lang"         not in st.session_state: st.session_state.ocr_lang         = OCR_LANG
 if "image_name"       not in st.session_state: st.session_state.image_name       = ""
 if "raw_pil"          not in st.session_state: st.session_state.raw_pil          = None
 if "analysis_img"     not in st.session_state: st.session_state.analysis_img     = None
@@ -343,6 +354,24 @@ if "🏠 Analyse Image" in nav:
 
     analysis_img = st.session_state.analysis_img
 
+    st.markdown("### OCR Language")
+    if st.session_state.ocr_lang not in OCR_LANG_OPTIONS:
+        st.session_state.ocr_lang = OCR_LANG_DEFAULT
+
+    if len(OCR_LANG_OPTIONS) > 1:
+        st.session_state.ocr_lang = st.selectbox(
+            "Tesseract OCR language",
+            options=OCR_LANG_OPTIONS,
+            index=OCR_LANG_OPTIONS.index(st.session_state.ocr_lang),
+            help="Choose Hindi OCR when the document contains Devanagari text.",
+        )
+    else:
+        st.info(
+            "Hindi OCR language data was not detected on this system. "
+            "Only English OCR is available."
+        )
+        st.markdown(f"**OCR language:** `{OCR_LANG_OPTIONS[0]}`")
+
     # ── Step 2: Analyse ──────────────────────────
     st.markdown("### Step 2 — Run Analysis")
     use_apis = st.checkbox(
@@ -367,7 +396,7 @@ if "🏠 Analyse Image" in nav:
         recs = generate_recommendations(final_results)
 
         with st.spinner("📝 Running Tesseract OCR…"):
-            ocr_conf, ocr_text = run_tesseract(analysis_img)
+            ocr_conf, ocr_text = run_tesseract(analysis_img, lang=st.session_state.ocr_lang)
 
         ocr_readiness = final_results["ocr_readiness_score"]
 
