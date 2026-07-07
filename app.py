@@ -5,12 +5,7 @@ Run: streamlit run app.py
 """
 
 import sys, os
-import shutil
 sys.path.insert(0, os.path.dirname(__file__))
-
-if sys.platform.startswith("win"):
-    import asyncio
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import numpy as np
 import pandas as pd
@@ -30,76 +25,10 @@ from config_manager import load_config, save_config, build_urls, PORTS, ENDPOINT
 
 try:
     import pytesseract
-    def _find_tesseract_cmd():
-        env_cmd = os.environ.get("TESSERACT_CMD")
-        if env_cmd and os.path.isfile(env_cmd):
-            return env_cmd
-
-        path_cmd = shutil.which("tesseract")
-        if path_cmd:
-            return path_cmd
-
-        program_files = [
-            os.environ.get("ProgramFiles"),
-            os.environ.get("ProgramFiles(x86)"),
-            os.environ.get("LocalAppData"),
-        ]
-        candidates = [
-            r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-            r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-            r"C:\Users\Yash Rajput\AppData\Local\Programs\Tesseract-OCR\tesseract.exe",
-        ]
-        for base_dir in program_files:
-            if base_dir:
-                candidates.append(os.path.join(base_dir, "Tesseract-OCR", "tesseract.exe"))
-                candidates.append(os.path.join(base_dir, "Programs", "Tesseract-OCR", "tesseract.exe"))
-
-        for candidate in candidates:
-            if os.path.isfile(candidate):
-                return candidate
-        return None
-
-    def _find_tessdata_prefix():
-        env_prefix = os.environ.get("TESSDATA_PREFIX")
-        candidates = [env_prefix] if env_prefix else []
-        candidates.extend([
-            "C:\\Program Files\\Tesseract-OCR\\",
-            "C:\\Program Files\\tessdata\\",
-            "C:\\Program Files (x86)\\Tesseract-OCR\\",
-            "C:\\Program Files (x86)\\tessdata\\",
-        ])
-
-        for candidate in candidates:
-            if not candidate:
-                continue
-            normalized = os.path.normpath(candidate)
-            if os.path.isfile(os.path.join(normalized, "tessdata", "hin.traineddata")):
-                return os.path.join(normalized, "tessdata")
-            if os.path.isfile(os.path.join(normalized, "hin.traineddata")):
-                return normalized
-        return None
-
-    TESSDATA_PREFIX = _find_tessdata_prefix()
-    OCR_LANG_OPTIONS = ["eng"]
-    OCR_LANG_DEFAULT = "eng"
-
-    if TESSDATA_PREFIX:
-        os.environ["TESSDATA_PREFIX"] = TESSDATA_PREFIX
-        if os.path.isfile(os.path.join(TESSDATA_PREFIX, "hin.traineddata")):
-            OCR_LANG_OPTIONS = ["hin+eng", "hin", "eng"]
-            OCR_LANG_DEFAULT = "hin+eng"
-        else:
-            OCR_LANG_OPTIONS = ["eng"]
-            OCR_LANG_DEFAULT = "eng"
-
-    OCR_LANG = OCR_LANG_DEFAULT
-
-    tesseract_cmd = _find_tesseract_cmd()
-    if tesseract_cmd:
-        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
-        TESSERACT_OK = True
-    else:
-        TESSERACT_OK = False
+    # ── SET YOUR TESSERACT PATH HERE ──────────────────────────────────────
+    # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    # ─────────────────────────────────────────────────────────────────────
+    TESSERACT_OK = True
 except ImportError:
     TESSERACT_OK = False
 
@@ -134,18 +63,32 @@ html,body,[class*="css"]{font-family:'Inter',sans-serif;}
 
 .metric-card{background:white;border-radius:12px;padding:16px;
     box-shadow:0 2px 8px rgba(0,0,0,0.07);border-top:3px solid #00C4B4;
-    text-align:center;height:100%;margin-bottom:8px;}
-.metric-card .label{font-size:11px;font-weight:600;color:#6B7280;
+    text-align:center;height:100%;margin-bottom:8px;position:relative;}
+.metric-card .label{font-size:13px;font-weight:700;color:#374151;
     text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;}
 .metric-card .value{font-size:28px;font-weight:700;
     font-family:'Space Grotesk',sans-serif;}
-.metric-card .badge{display:inline-block;padding:2px 10px;border-radius:20px;
-    font-size:11px;font-weight:600;margin-top:4px;}
+.metric-card .badge{display:inline-block;padding:3px 12px;border-radius:20px;
+    font-size:13px;font-weight:600;margin-top:4px;}
 .badge-excellent{background:#D1FAE5;color:#065F46;}
 .badge-good{background:#DBEAFE;color:#1E40AF;}
 .badge-average{background:#FEF3C7;color:#92400E;}
 .badge-poor{background:#FEE2E2;color:#991B1B;}
 .badge-error{background:#F3F4F6;color:#6B7280;}
+.metric-card .short-desc{font-size:13px;color:#4B5563;margin-top:7px;
+    font-style:italic;font-weight:500;line-height:1.4;}
+.metric-card .weight-src{font-size:11px;color:#9CA3AF;margin-top:5px;}
+.info-btn{position:absolute;top:8px;right:10px;background:none;border:none;
+    cursor:pointer;font-size:15px;color:#9CA3AF;padding:2px 5px;
+    border-radius:50%;transition:background 0.2s;}
+.info-btn:hover{background:#F3F4F6;color:#374151;}
+.card-info-panel{background:#EFF6FF;border-left:3px solid #3B82F6;
+    border-radius:0 0 10px 10px;padding:10px 12px;margin-top:10px;
+    text-align:left;font-size:12px;color:#1E3A5F;line-height:1.6;}
+.card-info-panel .info-title{font-weight:700;font-size:13px;
+    color:#1A2B4A;margin-bottom:6px;}
+.card-info-panel .info-row{margin-bottom:4px;}
+.card-info-panel .info-label{font-weight:600;color:#3B82F6;}
 
 .score-ring-wrap{display:flex;flex-direction:column;align-items:center;
     justify-content:center;padding:20px;
@@ -197,30 +140,50 @@ def score_color(s):
     if s >= 41: return "#F59E0B"
     return "#EF4444"
 
-def run_tesseract(img, lang=None):
+def run_tesseract(img):
     if not TESSERACT_OK:
         return None, None
-    if lang is None:
-        lang = OCR_LANG
     try:
-        data = pytesseract.image_to_data(
-            img,
-            lang=lang,
-            output_type=pytesseract.Output.DICT,
-        )
-        confs = []
-        for c in data.get("conf", []):
-            try:
-                conf = float(c)
-            except (TypeError, ValueError):
-                continue
-            if conf >= 0:
-                confs.append(conf)
+        data  = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+        confs = [c for c in data["conf"] if isinstance(c,(int,float)) and c >= 0]
         if confs:
-            return round(float(np.mean(confs)), 1), pytesseract.image_to_string(img, lang=lang)
+            return round(float(np.mean(confs)),1), pytesseract.image_to_string(img)
         return None, None
     except Exception:
         return None, None
+
+def make_radar(factor_results):
+    keys   = list(DISPLAY_NAMES.keys())
+    labels = [DISPLAY_NAMES[k] for k in keys]
+    scores = [factor_results.get(k,{}).get("score",0) for k in keys]
+    fig = go.Figure()
+    fig.add_trace(go.Scatterpolar(
+        r=scores+[scores[0]], theta=labels+[labels[0]],
+        fill="toself", fillcolor="rgba(0,196,180,0.15)",
+        line=dict(color="#00C4B4",width=2), name="Your Image",
+        marker=dict(color="#1A2B4A",size=7),
+    ))
+    fig.add_trace(go.Scatterpolar(
+        r=[70]*len(labels)+[70], theta=labels+[labels[0]],
+        fill="none",
+        line=dict(color="rgba(245,158,11,0.5)",width=1.5,dash="dot"),
+        name="Good threshold (70)",
+    ))
+    fig.update_layout(
+        polar=dict(
+            bgcolor="#F9FAFB",
+            radialaxis=dict(range=[0,100],tickfont=dict(size=9),
+                gridcolor="#E5E7EB",linecolor="#D1D5DB"),
+            angularaxis=dict(tickfont=dict(size=11,color="#374151"),
+                linecolor="#E5E7EB"),
+        ),
+        showlegend=True,
+        legend=dict(orientation="h",y=-0.15,font=dict(size=11)),
+        paper_bgcolor="rgba(0,0,0,0)",
+        margin=dict(t=20,b=20,l=40,r=40),
+        height=430,
+    )
+    return fig
 
 # ── Session state init ────────────────────────────────────────────────────────
 # This keeps the image and results alive when user switches pages
@@ -229,11 +192,11 @@ if "final_results"    not in st.session_state: st.session_state.final_results   
 if "api_status"       not in st.session_state: st.session_state.api_status       = {}
 if "ocr_conf"         not in st.session_state: st.session_state.ocr_conf         = None
 if "ocr_text"         not in st.session_state: st.session_state.ocr_text         = ""
-if "ocr_lang"         not in st.session_state: st.session_state.ocr_lang         = OCR_LANG
 if "image_name"       not in st.session_state: st.session_state.image_name       = ""
 if "raw_pil"          not in st.session_state: st.session_state.raw_pil          = None
 if "analysis_img"     not in st.session_state: st.session_state.analysis_img     = None
 if "recs"             not in st.session_state: st.session_state.recs             = []
+if "card_info_open"   not in st.session_state: st.session_state.card_info_open   = {}
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -354,24 +317,6 @@ if "🏠 Analyse Image" in nav:
 
     analysis_img = st.session_state.analysis_img
 
-    st.markdown("### OCR Language")
-    if st.session_state.ocr_lang not in OCR_LANG_OPTIONS:
-        st.session_state.ocr_lang = OCR_LANG_DEFAULT
-
-    if len(OCR_LANG_OPTIONS) > 1:
-        st.session_state.ocr_lang = st.selectbox(
-            "Tesseract OCR language",
-            options=OCR_LANG_OPTIONS,
-            index=OCR_LANG_OPTIONS.index(st.session_state.ocr_lang),
-            help="Choose Hindi OCR when the document contains Devanagari text.",
-        )
-    else:
-        st.info(
-            "Hindi OCR language data was not detected on this system. "
-            "Only English OCR is available."
-        )
-        st.markdown(f"**OCR language:** `{OCR_LANG_OPTIONS[0]}`")
-
     # ── Step 2: Analyse ──────────────────────────
     st.markdown("### Step 2 — Run Analysis")
     use_apis = st.checkbox(
@@ -396,7 +341,7 @@ if "🏠 Analyse Image" in nav:
         recs = generate_recommendations(final_results)
 
         with st.spinner("📝 Running Tesseract OCR…"):
-            ocr_conf, ocr_text = run_tesseract(analysis_img, lang=st.session_state.ocr_lang)
+            ocr_conf, ocr_text = run_tesseract(analysis_img)
 
         ocr_readiness = final_results["ocr_readiness_score"]
 
@@ -493,29 +438,54 @@ if "🏠 Analyse Image" in nav:
         st.markdown("#### Factor Scores")
         cols = st.columns(4)
         for i, (key, display) in enumerate(DISPLAY_NAMES.items()):
-            r   = final_results.get(key, {})
-            sc  = r.get("score", 0)
-            s   = r.get("status", "—")
-            col = score_color(float(sc))
+            r    = final_results.get(key, {})
+            sc   = r.get("score", 0)
+            s    = r.get("status", "—")
+            col  = score_color(float(sc))
             bcls = f"badge-{s.lower()}"
             src_tag = ""
             if api_status:
                 src = api_status.get(key, "")
                 if "✅" in src:
-                    src_tag = '<span style="font-size:10px;color:#065F46;font-weight:600;">● API</span>'
+                    src_tag = '<span style="font-size:11px;color:#065F46;font-weight:600;">● API</span>'
                 else:
-                    src_tag = '<span style="font-size:10px;color:#9CA3AF;">● Local</span>'
+                    src_tag = '<span style="font-size:11px;color:#9CA3AF;">● Local</span>'
+
+            short_desc = get_short_description(key, float(sc))
+
+            # Info toggle button — ℹ️ in top-right of card
+            info_key   = f"info_{key}"
+            is_open    = st.session_state.card_info_open.get(key, False)
+
             with cols[i % 4]:
-                short_desc = get_short_description(key, float(sc))
+                # Toggle button ABOVE the card HTML (Streamlit button)
+                btn_label = "✕ Close" if is_open else "ℹ️"
+                if st.button(btn_label, key=info_key):
+                    st.session_state.card_info_open[key] = not is_open
+                    st.rerun()
+
+                # Build info panel HTML if open
+                info_html = ""
+                if is_open and key in FACTOR_INFO:
+                    fi = FACTOR_INFO[key]
+                    ideal = fi["ideal_range"].split(".")[0]
+                    info_html = f"""
+                    <div class="card-info-panel">
+                      <div class="info-title">📐 {fi['display_name']}</div>
+                      <div class="info-row"><span class="info-label">Owner:</span> {fi['owner']}</div>
+                      <div class="info-row"><span class="info-label">Definition:</span> {fi['definition'][:120]}…</div>
+                      <div class="info-row"><span class="info-label">OCR Impact:</span> {fi['ocr_impact'][:120]}…</div>
+                      <div class="info-row"><span class="info-label">Ideal Range:</span> {ideal}</div>
+                    </div>"""
+
                 st.markdown(f"""
                 <div class="metric-card">
                   <div class="label">{display}</div>
                   <div class="value" style="color:{col};">{sc}</div>
                   <span class="badge {bcls}">{s}</span>
-                  <div style="font-size:11px;color:#6B7280;margin-top:6px;font-style:italic;">{short_desc}</div>
-                  <div style="font-size:10px;color:#9CA3AF;margin-top:4px;">
-                    Weight: {int(WEIGHTS[key]*100)}% &nbsp;{src_tag}
-                  </div>
+                  <div class="short-desc">{short_desc}</div>
+                  <div class="weight-src">Weight: {int(WEIGHTS[key]*100)}% &nbsp;{src_tag}</div>
+                  {info_html}
                 </div>""", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
