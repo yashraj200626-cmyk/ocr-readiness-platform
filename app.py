@@ -359,7 +359,7 @@ if "🏠 Analyse Image" in nav:
 
         save_uploaded_image(analysis_img,image_name)
         save_result(image_name,final_results,ocr_readiness,ocr_conf)
-        
+
         # Store everything in session state
         st.session_state.analysis_done = True
         st.session_state.final_results = final_results
@@ -790,32 +790,6 @@ elif "📊 History" in nav:
 
             score = float(row["ocr_readiness_score"])
 
-            st.markdown(
-                f"""
-                <div style="
-                background:#1A2B4A;
-                border-radius:12px;
-                padding:15px;
-                text-align:center;
-                ">
-                    <h1 style="
-                    color:{score_color(score)};
-                    margin:0;
-                    ">
-                        {score}
-                    </h1>
-
-                    <p style="
-                    color:white;
-                    margin:0;
-                    ">
-                    /100
-                    </p>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
             st.write("")
 
             factor_columns = [
@@ -844,15 +818,35 @@ elif "📊 History" in nav:
 
             if "ocr_confidence" in row:
 
-                st.metric(
-                    "OCR Confidence",
-                    row["ocr_confidence"]
-                )
+                st.markdown(f"""
+                <div style="
+                    background:#1E2A52;
+                    border-radius:18px;
+                    padding:22px;
+                    text-align:center;
+                    margin-top:15px;
+                    margin-bottom:15px;
+                ">
 
-            st.metric(
-                "Timestamp",
-                str(row["timestamp"])
-            )
+                <div style="
+                    color:white;
+                    font-size:20px;
+                    font-weight:600;
+                ">
+                    OCR Confidence
+                </div>
+
+                <div style="
+                    color:#5B8CFF;
+                    font-size:58px;
+                    font-weight:700;
+                    margin-top:10px;
+                ">
+                    {float(row["ocr_confidence"]):.1f}
+                </div>
+
+                </div>
+                """, unsafe_allow_html=True)
 
     else:
 
