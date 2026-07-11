@@ -264,6 +264,49 @@ if "🏠 Analyse Image" in nav:
       <p>Upload → Crop (optional) → 10 Factor Scores → OCR Readiness Score → Tesseract Validation → PDF Report</p>
     </div>""", unsafe_allow_html=True)
 
+    # --------------------------------------------------
+    # Welcome message before image upload
+    # --------------------------------------------------
+
+    if uploaded_file is None:
+
+        st.markdown("""
+    <div style="
+        background:#1E2A52;
+        border-radius:18px;
+        padding:30px;
+        text-align:center;
+        margin-top:25px;
+        border:1px solid #3A4F87;
+    ">
+
+    <h2 style="color:#5B8CFF;">
+        📄 Welcome to the OCR Readiness Evaluation Platform
+    </h2>
+
+    <p style="
+        color:white;
+        font-size:18px;
+        line-height:1.7;
+    ">
+
+    Upload a document image using the <b>Upload Image</b> button above to begin the analysis.
+
+    <br><br>
+
+    The platform will automatically evaluate the image quality, calculate OCR Readiness Score, estimate OCR Confidence, analyze all quality factors, and generate recommendations to improve OCR performance.
+
+    <br><br>
+
+    👆 Please upload an image to continue.
+
+    </p>
+
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.stop()
+
     # ── Upload ──────────────────────────────────
     uploaded = st.file_uploader(
         "Upload a document image",
