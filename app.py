@@ -786,11 +786,36 @@ elif "📊 History" in nav:
 
         with right:
 
-            st.markdown("### OCR Readiness")
-
             score = float(row["ocr_readiness_score"])
 
-            st.write("")
+            st.markdown(f"""
+<div style="
+    background:#1E2A52;
+    border-radius:18px;
+    padding:22px;
+    text-align:center;
+    margin-bottom:20px;
+">
+
+<div style="
+    color:white;
+    font-size:20px;
+    font-weight:600;
+">
+    OCR Readiness
+</div>
+
+<div style="
+    color:#5B8CFF;
+    font-size:58px;
+    font-weight:700;
+    margin-top:10px;
+">
+    {score:.1f}
+</div>
+
+</div>
+""", unsafe_allow_html=True)
 
             factor_columns = [
                 c for c in df.columns
