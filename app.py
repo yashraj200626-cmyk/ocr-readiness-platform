@@ -260,364 +260,943 @@ if "🏠 Analyse Image" in nav:
 
     st.markdown("""
     <div class="top-banner">
-      <h1>🔍 OCR Readiness Evaluation Platform</h1>
-      <p>Upload → Crop (optional) → 10 Factor Scores → OCR Readiness Score → Tesseract Validation → PDF Report</p>
-    </div>""", unsafe_allow_html=True)
-
-    # --------------------------------------------------
-    # Welcome message before image upload
-    # --------------------------------------------------
-
-    if uploaded_file is None:
-
-        st.markdown("""
-    <div style="
-        background:#1E2A52;
-        border-radius:18px;
-        padding:30px;
-        text-align:center;
-        margin-top:25px;
-        border:1px solid #3A4F87;
-    ">
-
-    <h2 style="color:#5B8CFF;">
-        📄 Welcome to the OCR Readiness Evaluation Platform
-    </h2>
-
-    <p style="
-        color:white;
-        font-size:18px;
-        line-height:1.7;
-    ">
-
-    Upload a document image using the <b>Upload Image</b> button above to begin the analysis.
-
-    <br><br>
-
-    The platform will automatically evaluate the image quality, calculate OCR Readiness Score, estimate OCR Confidence, analyze all quality factors, and generate recommendations to improve OCR performance.
-
-    <br><br>
-
-    👆 Please upload an image to continue.
-
-    </p>
-
+        <h1>🔍 OCR Readiness Evaluation Platform</h1>
+        <p>
+        Upload a document image • Analyse 10 Quality Factors •
+        Predict OCR Readiness • Validate with Tesseract •
+        Export Professional PDF Report
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
-    st.stop()
+    # ---------------------------------------------------
+    # Upload Section
+    # ---------------------------------------------------
 
-    # ── Upload ──────────────────────────────────
     uploaded = st.file_uploader(
-        "Upload a document image",
-        type=["png","jpg","jpeg","bmp","tiff","webp"],
+        "📂 Upload Document Image",
+        type=["png", "jpg", "jpeg", "bmp", "tiff", "webp"]
     )
 
-    if uploaded is not None:
-        raw_pil = Image.open(uploaded).convert("RGB")
-        # Only reset if a NEW image is uploaded
-        if uploaded.name != st.session_state.image_name:
-            st.session_state.raw_pil      = raw_pil
-            st.session_state.image_name   = uploaded.name
-            st.session_state.analysis_done = False
-            st.session_state.final_results = {}
-            st.session_state.analysis_img  = raw_pil
-    elif st.session_state.raw_pil is None:
-        st.info("👆 Upload a document image to begin the analysis.")
+    # ---------------------------------------------------
+    # Welcome Screen
+    # ---------------------------------------------------
+
+    if uploaded is None and st.session_state.raw_pil is None:
+
+        st.markdown("""
+        <div style="
+            background:linear-gradient(135deg,#1A2B4A,#0F3460);
+            border-radius:20px;
+            padding:45px;
+            margin-top:20px;
+            text-align:center;
+            border:1px solid #304878;
+        ">
+
+        <h2 style="
+            color:#5B8CFF;
+            margin-bottom:20px;
+            font-size:30px;
+        ">
+            👋 Welcome
+        </h2>
+
+        <p style="
+            color:white;
+            font-size:18px;
+            line-height:1.8;
+        ">
+
+        This platform evaluates whether a document image is suitable
+        for Optical Character Recognition (OCR).
+
+        <br><br>
+
+        It automatically analyses
+
+        <br>
+
+        ✅ Noise
+
+        <br>
+
+        ✅ Resolution
+
+        <br>
+
+        ✅ Blur
+
+        <br>
+
+        ✅ Contrast
+
+        <br>
+
+        ✅ Text Density
+
+        <br>
+
+        ✅ Stroke Width
+
+        <br>
+
+        ✅ Matra Continuity
+
+        <br>
+
+        ✅ Zone Integrity
+
+        <br>
+
+        ✅ Connected Components
+
+        <br>
+
+        ✅ Skew Detection
+
+        <br><br>
+
+        After analysis, you'll receive
+
+        <br><br>
+
+        📊 OCR Readiness Score
+
+        <br>
+
+        📄 OCR Confidence
+
+        <br>
+
+        💡 Improvement Suggestions
+
+        <br>
+
+        📥 Downloadable PDF Report
+
+        <br><br>
+
+        <span style="
+            color:#5B8CFF;
+            font-size:20px;
+            font-weight:bold;
+        ">
+        ⬆ Upload an image above to begin.
+        </span>
+
+        </p>
+
+        </div>
+        """, unsafe_allow_html=True)
+
         st.stop()
 
-    raw_pil    = st.session_state.raw_pil
+    # ---------------------------------------------------
+    # Store Uploaded Image
+    # ---------------------------------------------------
+
+    if uploaded is not None:
+
+        raw_pil = Image.open(uploaded).convert("RGB")
+
+        if uploaded.name != st.session_state.image_name:
+
+            st.session_state.raw_pil = raw_pil
+            st.session_state.image_name = uploaded.name
+            st.session_state.analysis_done = False
+            st.session_state.final_results = {}
+            st.session_state.analysis_img = raw_pil
+
+    raw_pil = st.session_state.raw_pil
     image_name = st.session_state.image_name
 
-    # ── Step 1: Crop ─────────────────────────────
-    st.markdown("### Step 1 — Select Region")
-    use_crop = st.checkbox("✂️ Crop the image before analysis")
+    # ======================================================
+# STEP 1 — Select Analysis Region
+# ======================================================
 
-    if use_crop:
-        if CROPPER_OK:
-            st.markdown("**Drag the handles to select the region you want to analyse:**")
-            cropped = st_cropper(
-                raw_pil,
-                realtime_update=True,
-                box_color="#00C4B4",
-                aspect_ratio=None,
+st.markdown("---")
+st.markdown("## ✂️ Step 1 • Select Image Region")
+
+st.info(
+    "You may analyse the complete image or crop only the required document area."
+)
+
+use_crop = st.toggle(
+    "Crop Image Before Analysis",
+    value=False
+)
+
+if use_crop:
+
+    if CROPPER_OK:
+
+        st.markdown(
+            "Drag the handles below to select the portion you want to analyse."
+        )
+
+        cropped = st_cropper(
+            raw_pil,
+            realtime_update=True,
+            box_color="#00C4B4",
+            aspect_ratio=None
+        )
+
+        left, right = st.columns([3,1])
+
+        with left:
+
+            st.image(
+                cropped,
+                caption="Selected Region",
+                use_container_width=True
             )
-            col_prev, col_info = st.columns([2,1])
-            with col_prev:
-                st.image(cropped, caption="Selected crop region", width="stretch")
-            with col_info:
-                w, h = cropped.size
-                st.metric("Width", f"{w} px")
-                st.metric("Height", f"{h} px")
-            st.session_state.analysis_img = cropped
-        else:
-            st.warning("streamlit-cropper not installed. Using slider crop instead.")
-            c1, c2 = st.columns(2)
-            with c1:
-                st.image(raw_pil, caption="Original Image", width="stretch")
-            with c2:
-                w, h = raw_pil.size
-                left   = st.slider("Left",   0, w-1, 0)
-                top    = st.slider("Top",    0, h-1, 0)
-                right  = st.slider("Right",  1, w,   w)
-                bottom = st.slider("Bottom", 1, h,   h)
-                if right  <= left:  right  = left  + 1
-                if bottom <= top:   bottom = top   + 1
-                cropped = raw_pil.crop((left, top, right, bottom))
-                st.image(cropped, caption="Cropped Region", width="stretch")
-            st.session_state.analysis_img = cropped
+
+        with right:
+
+            width, height = cropped.size
+
+            st.metric(
+                "Width",
+                f"{width}px"
+            )
+
+            st.metric(
+                "Height",
+                f"{height}px"
+            )
+
+            st.success("Ready for Analysis")
+
+        st.session_state.analysis_img = cropped
+
     else:
-        st.image(raw_pil, caption="Full image — will be analysed", width="stretch")
-        st.session_state.analysis_img = raw_pil
 
-    analysis_img = st.session_state.analysis_img
+        st.warning(
+            "Cropper package not installed. Using manual crop sliders."
+        )
 
-    # ── Step 2: Analyse ──────────────────────────
-    st.markdown("### Step 2 — Run Analysis")
-    use_apis = st.checkbox(
-        "🔌 Use team APIs (Vivek · Mansi · Krish · Tanusha) — falls back to local if any API is offline",
-        value=True,
+        img_w, img_h = raw_pil.size
+
+        c1, c2 = st.columns(2)
+
+        with c1:
+
+            st.image(
+                raw_pil,
+                caption="Original Image",
+                use_container_width=True
+            )
+
+        with c2:
+
+            left = st.slider(
+                "Left",
+                0,
+                img_w-1,
+                0
+            )
+
+            top = st.slider(
+                "Top",
+                0,
+                img_h-1,
+                0
+            )
+
+            right = st.slider(
+                "Right",
+                1,
+                img_w,
+                img_w
+            )
+
+            bottom = st.slider(
+                "Bottom",
+                1,
+                img_h,
+                img_h
+            )
+
+            if right <= left:
+                right = left + 1
+
+            if bottom <= top:
+                bottom = top + 1
+
+            cropped = raw_pil.crop(
+                (
+                    left,
+                    top,
+                    right,
+                    bottom
+                )
+            )
+
+            st.image(
+                cropped,
+                caption="Cropped Image",
+                use_container_width=True
+            )
+
+        st.session_state.analysis_img = cropped
+
+else:
+
+    st.image(
+        raw_pil,
+        caption="Original Image (Full Image Will Be Analysed)",
+        use_container_width=True
     )
 
-    if st.button("🚀 Analyse Image", type="primary", width="stretch"):
+    st.session_state.analysis_img = raw_pil
+
+analysis_img = st.session_state.analysis_img
+
+# ======================================================
+# STEP 2 — Run OCR Readiness Analysis
+# ======================================================
+
+st.markdown("---")
+st.markdown("## 🚀 Step 2 • Analyse Image")
+
+st.markdown("""
+<div style="
+background:#F8FAFC;
+padding:18px;
+border-radius:12px;
+border-left:5px solid #00C4B4;
+margin-bottom:20px;
+">
+
+<b>Ready to Analyse</b><br><br>
+
+Click the button below to evaluate your document.
+
+The platform will automatically
+
+• Calculate all 10 OCR Quality Factors
+
+• Compute the OCR Readiness Score
+
+• Estimate OCR Confidence
+
+• Generate Improvement Recommendations
+
+• Save this analysis into History
+
+• Create a downloadable PDF Report
+
+</div>
+""", unsafe_allow_html=True)
+
+analyse = st.button(
+    "🚀 Analyse Image",
+    use_container_width=True,
+    type="primary"
+)
+
+if analyse:
+
+    with st.spinner("Preparing image..."):
 
         bgr = pil_to_bgr(analysis_img)
 
-        with st.spinner("⚙️ Computing local factors…"):
-            local_results = run_all_factors(bgr)
+    with st.spinner("Calculating OCR Quality Factors..."):
 
-        final_results = local_results
-        api_status    = {}
+        local_results = run_all_factors(bgr)
 
-        if use_apis:
-            with st.spinner("🔌 Calling team APIs (Vivek · Mansi · Krish · Tanusha)…"):
-                final_results, api_status = call_all_team_apis(bgr, local_results)
+    with st.spinner("Connecting with Team APIs..."):
 
-        recs = generate_recommendations(final_results)
+        final_results, api_status = call_all_team_apis(
+            bgr,
+            local_results
+        )
 
-        with st.spinner("📝 Running Tesseract OCR…"):
-            ocr_conf, ocr_text = run_tesseract(analysis_img)
+    with st.spinner("Running Tesseract OCR..."):
 
-        ocr_readiness = final_results["ocr_readiness_score"]
+        ocr_conf, ocr_text = run_tesseract(
+            analysis_img
+        )
 
-        save_uploaded_image(analysis_img,image_name)
-        save_result(image_name,final_results,ocr_readiness,ocr_conf)
+    with st.spinner("Generating Recommendations..."):
 
-        # Store everything in session state
-        st.session_state.analysis_done = True
-        st.session_state.final_results = final_results
-        st.session_state.api_status    = api_status
-        st.session_state.ocr_conf      = ocr_conf
-        st.session_state.ocr_text      = ocr_text or ""
-        st.session_state.recs          = recs
+        recs = generate_recommendations(
+            final_results
+        )
 
-    # ── Show results if analysis has been done ────
-    if st.session_state.analysis_done:
+    ocr_readiness = final_results["ocr_readiness_score"]
 
-        final_results = st.session_state.final_results
-        api_status    = st.session_state.api_status
-        ocr_conf      = st.session_state.ocr_conf
-        ocr_text      = st.session_state.ocr_text
-        recs          = st.session_state.recs
-        ocr_readiness = final_results["ocr_readiness_score"]
-        ocr_stat      = final_results["ocr_readiness_status"]
+    # -----------------------------------
+    # Save Image
+    # -----------------------------------
 
-        # ── API source summary ───────────────────
-        if api_status:
-            with st.expander("🔌 Data source for each factor"):
-                for key, src in api_status.items():
-                    disp = DISPLAY_NAMES.get(key, key)
-                    if "Yash" in src:       css = "api-yash"
-                    elif "Mansi" in src:    css = "api-mansi"
-                    elif "Krish" in src:    css = "api-krish"
-                    elif "Vivek" in src:    css = "api-vivek"
-                    elif "Tanusha" in src:  css = "api-tanusha"
-                    else:                   css = "api-local"
-                    st.markdown(
-                        f'<div class="api-row {css}"><b>{disp}</b>: {src}</div>',
-                        unsafe_allow_html=True)
+    save_uploaded_image(
+        analysis_img,
+        image_name
+    )
 
-        st.markdown("---")
-        st.markdown("### Results")
+    # -----------------------------------
+    # Save CSV Result
+    # -----------------------------------
 
-        # ── 3 score rings ────────────────────────
-        r1, r2, r3 = st.columns(3)
+    save_result(
+        image_name=image_name,
+        factor_results=final_results,
+        ocr_readiness=ocr_readiness,
+        ocr_confidence=ocr_conf
+    )
 
-        with r1:
-            c = score_color(ocr_readiness)
+    # -----------------------------------
+    # Save Session
+    # -----------------------------------
+
+    st.session_state.analysis_done = True
+
+    st.session_state.final_results = final_results
+
+    st.session_state.api_status = api_status
+
+    st.session_state.ocr_conf = ocr_conf
+
+    st.session_state.ocr_text = ocr_text if ocr_text else ""
+
+    st.session_state.recs = recs
+
+    st.success("✅ Analysis completed successfully.")
+
+    # ======================================================
+# RESULTS
+# ======================================================
+
+if st.session_state.analysis_done:
+
+    final_results = st.session_state.final_results
+    api_status = st.session_state.api_status
+    ocr_conf = st.session_state.ocr_conf
+    ocr_text = st.session_state.ocr_text
+    recs = st.session_state.recs
+
+    ocr_readiness = final_results["ocr_readiness_score"]
+    ocr_status = final_results["ocr_readiness_status"]
+
+    st.markdown("---")
+
+    st.markdown("""
+    <h2 style="
+        text-align:center;
+        color:#1A2B4A;
+        margin-bottom:25px;
+    ">
+    📊 Analysis Results
+    </h2>
+    """, unsafe_allow_html=True)
+
+    # ==================================================
+    # API Summary
+    # ==================================================
+
+    with st.expander("🔌 Team API Status"):
+
+        for key, src in api_status.items():
+
+            disp = DISPLAY_NAMES.get(key, key)
+
+            if "Yash" in src:
+                css = "api-yash"
+
+            elif "Vivek" in src:
+                css = "api-vivek"
+
+            elif "Mansi" in src:
+                css = "api-mansi"
+
+            elif "Krish" in src:
+                css = "api-krish"
+
+            elif "Tanusha" in src:
+                css = "api-tanusha"
+
+            else:
+                css = "api-local"
+
+            st.markdown(
+                f'<div class="api-row {css}"><b>{disp}</b> : {src}</div>',
+                unsafe_allow_html=True
+            )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ==================================================
+    # SCORE CARDS
+    # ==================================================
+
+    c1, c2, c3 = st.columns(3)
+
+    # -----------------------------------------
+
+    with c1:
+
+        clr = score_color(ocr_readiness)
+
+        st.markdown(f"""
+        <div style="
+            background:#1A2B4A;
+            border-radius:18px;
+            padding:25px;
+            text-align:center;
+            min-height:240px;
+        ">
+
+        <div style="
+            color:white;
+            font-size:18px;
+            font-weight:600;
+        ">
+            OCR Readiness Score
+        </div>
+
+        <div style="
+            color:{clr};
+            font-size:70px;
+            font-weight:700;
+            margin-top:15px;
+        ">
+            {ocr_readiness}
+        </div>
+
+        <div style="
+            color:#A7B7D9;
+            font-size:18px;
+        ">
+            {ocr_status}
+        </div>
+
+        </div>
+        """, unsafe_allow_html=True)
+
+    # -----------------------------------------
+
+    with c2:
+
+        if ocr_conf is not None:
+
+            clr = score_color(ocr_conf)
+
             st.markdown(f"""
-            <div class="score-ring-wrap">
-              <div class="score-ring-label">OCR Readiness Score</div>
-              <div class="score-ring-number" style="color:{c};">{ocr_readiness}</div>
-              <div class="score-ring-status">{ocr_stat}</div>
-            </div>""", unsafe_allow_html=True)
+            <div style="
+                background:#1A2B4A;
+                border-radius:18px;
+                padding:25px;
+                text-align:center;
+                min-height:240px;
+            ">
 
-        with r2:
-            if ocr_conf is not None:
-                c2 = score_color(ocr_conf)
-                st.markdown(f"""
-                <div class="score-ring-wrap">
-                  <div class="score-ring-label">Tesseract Confidence</div>
-                  <div class="score-ring-number" style="color:{c2};">{ocr_conf}%</div>
-                  <div class="score-ring-status">Actual OCR</div>
-                </div>""", unsafe_allow_html=True)
+            <div style="
+                color:white;
+                font-size:18px;
+                font-weight:600;
+            ">
+                OCR Confidence
+            </div>
+
+            <div style="
+                color:{clr};
+                font-size:70px;
+                font-weight:700;
+                margin-top:15px;
+            ">
+                {ocr_conf}
+            </div>
+
+            <div style="
+                color:#A7B7D9;
+                font-size:18px;
+            ">
+                Tesseract OCR
+            </div>
+
+            </div>
+            """, unsafe_allow_html=True)
+
+        else:
+
+            st.info("OCR Confidence unavailable.")
+
+    # -----------------------------------------
+
+    with c3:
+
+        if ocr_conf is not None:
+
+            diff = round(
+                abs(
+                    ocr_readiness - ocr_conf
+                ),
+                1
+            )
+
+            if diff < 10:
+                colour = "#10B981"
+                txt = "Excellent Prediction"
+
+            elif diff < 20:
+                colour = "#F59E0B"
+                txt = "Acceptable Prediction"
+
             else:
-                st.markdown("""
-                <div class="score-ring-wrap">
-                  <div class="score-ring-label">Tesseract Confidence</div>
-                  <div class="score-ring-number" style="color:#6B7280;">N/A</div>
-                  <div class="score-ring-status">Not available</div>
-                </div>""", unsafe_allow_html=True)
+                colour = "#EF4444"
+                txt = "Needs Improvement"
 
-        with r3:
-            if ocr_conf is not None:
-                diff = ocr_readiness - ocr_conf
-                dc   = "#10B981" if abs(diff)<10 else "#F59E0B" if abs(diff)<20 else "#EF4444"
-                lbl  = "Predicted ≈ Actual ✓" if abs(diff)<10 else "Small deviation" if abs(diff)<20 else "Large deviation"
-                st.markdown(f"""
-                <div class="score-ring-wrap">
-                  <div class="score-ring-label">Predicted vs Actual</div>
-                  <div class="score-ring-number" style="color:{dc};">{diff:+.1f}</div>
-                  <div class="score-ring-status">{lbl}</div>
-                </div>""", unsafe_allow_html=True)
-            else:
-                st.markdown("""
-                <div class="score-ring-wrap">
-                  <div class="score-ring-label">Predicted vs Actual</div>
-                  <div class="score-ring-number" style="color:#6B7280;">—</div>
-                  <div class="score-ring-status">Tesseract needed</div>
-                </div>""", unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style="
+                background:#1A2B4A;
+                border-radius:18px;
+                padding:25px;
+                text-align:center;
+                min-height:240px;
+            ">
 
-        st.markdown("<br>", unsafe_allow_html=True)
+            <div style="
+                color:white;
+                font-size:18px;
+                font-weight:600;
+            ">
+                Prediction Accuracy
+            </div>
 
-        # ── 10 factor cards ─────────────────────
-        st.markdown("#### Factor Scores")
-        cols = st.columns(4)
-        for i, (key, display) in enumerate(DISPLAY_NAMES.items()):
-            r    = final_results.get(key, {})
-            sc   = r.get("score", 0)
-            s    = r.get("status", "—")
-            col  = score_color(float(sc))
-            bcls = f"badge-{s.lower()}"
-            src_tag = ""
-            if api_status:
-                src = api_status.get(key, "")
-                if "✅" in src:
-                    src_tag = '<span style="font-size:11px;color:#065F46;font-weight:600;">● API</span>'
-                else:
-                    src_tag = '<span style="font-size:11px;color:#9CA3AF;">● Local</span>'
+            <div style="
+                color:{colour};
+                font-size:70px;
+                font-weight:700;
+                margin-top:15px;
+            ">
+                {diff}
+            </div>
 
-            short_desc = get_short_description(key, float(sc))
+            <div style="
+                color:#A7B7D9;
+                font-size:18px;
+            ">
+                {txt}
+            </div>
 
-            # Build info panel content
-            info_html = ""
-            if key in FACTOR_INFO:
-                fi    = FACTOR_INFO[key]
-                ideal = fi["ideal_range"].split(".")[0]
+            </div>
+            """, unsafe_allow_html=True)
 
-                # Clean text — remove newlines, bullets, special chars that break HTML
-                def clean_text(text, limit=150):
-                    import html
-                    t = text.replace("\n", " ").replace("•", "-").replace("·", "-")
-                    t = html.escape(t)   # escapes <, >, &, ", '
-                    t = t[:limit] + "…" if len(t) > limit else t
-                    return t
+        else:
 
-                defn  = clean_text(fi["definition"], 150)
-                imp   = clean_text(fi["ocr_impact"], 150)
-                ideal_clean = clean_text(ideal, 100)
+            st.info("Prediction unavailable.")
 
-                info_html = f"""
-                <div class="info-row"><span class="info-label">&#128100; Owner:</span> {fi['owner']}</div>
-                <div class="info-row"><span class="info-label">&#128214; What it is:</span> {defn}</div>
-                <div class="info-row"><span class="info-label">&#127919; OCR Impact:</span> {imp}</div>
-                <div class="info-row"><span class="info-label">&#9989; Ideal Range:</span> {ideal_clean}</div>"""
+    # ======================================================
+    # FACTOR SCORES
+    # ======================================================
 
-            # Unique checkbox ID for each card (pure CSS toggle)
-            chk_id = f"chk_{key}"
+    st.markdown("---")
+    st.markdown("""
+    <h2 style="
+    text-align:center;
+    color:#1A2B4A;
+    margin-bottom:25px;
+    ">
+    📈 OCR Quality Factor Scores
+    </h2>
+    """, unsafe_allow_html=True)
 
-            with cols[i % 4]:
-                st.markdown(f"""
-                <div class="metric-card">
-                  <div class="label">{display}</div>
-                  <div class="value" style="color:{col};">{sc}</div>
-                  <span class="badge {bcls}">{s}</span>
-                  <div class="short-desc">{short_desc}</div>
-                  <div class="weight-src">Weight: {int(WEIGHTS[key]*100)}% &nbsp;{src_tag}</div>
+    cols = st.columns(2)
 
-                  <input type="checkbox" class="toggle-check" id="{chk_id}">
-                  <div class="card-info-panel">
-                    <div class="info-title">📐 {FACTOR_INFO[key]['display_name'] if key in FACTOR_INFO else display}</div>
-                    {info_html}
-                  </div>
-                  <label class="toggle-arrow" for="{chk_id}">∨</label>
-                </div>""", unsafe_allow_html=True)
+    for i, (key, display) in enumerate(DISPLAY_NAMES.items()):
 
-        st.markdown("<br>", unsafe_allow_html=True)
+        result = final_results.get(key, {})
 
-        # ── Tabs ─────────────────────────────────
-        tab1, tab2, tab3 = st.tabs([
-            "🔬 Factor Details",
-            "📝 OCR Text",
-            "💡 Recommendations",
-        ])
+        score = float(result.get("score", 0))
 
-        with tab1:
-            st.markdown("Click any factor to see its detailed explanation:")
-            for key, display in DISPLAY_NAMES.items():
-                r      = final_results.get(key, {})
-                sc     = r.get("score", 0)
-                st_txt = r.get("status","—")
-                src    = api_status.get(key,"local") if api_status else "local"
-                col    = score_color(float(sc))
-                # Get rich description based on score range
-                rich_desc = get_factor_description(key, float(sc))
-                with st.expander(f"**{display}** — {sc}/100   ({st_txt})"):
-                    ca, cb = st.columns([3,1])
-                    with ca:
-                        # Rich description box
-                        st.markdown(
-                            f'<div class="desc-box">{rich_desc}</div>',
-                            unsafe_allow_html=True)
-                        if r.get("raw_value") is not None:
-                            st.caption(f"📊 Raw value: {r['raw_value']}  {r.get('unit','')}")
-                        st.caption(f"🔌 Source: {src}")
-                    with cb:
-                        st.markdown(f"<div style='text-align:center;font-size:36px;font-weight:700;color:{col};'>{sc}</div>", unsafe_allow_html=True)
-                        st.progress(int(min(sc, 100)))
-                        st.markdown(f"<div style='text-align:center;font-size:12px;color:#6B7280;'>out of 100</div>", unsafe_allow_html=True)
+        status = result.get("status", "-")
 
-        with tab2:
-            if ocr_conf is not None and ocr_text:
-                st.markdown(f"**Tesseract Confidence: {ocr_conf}%**")
-                st.text_area("Extracted Text", ocr_text, height=220)
-            else:
-                st.info(
-                    "Tesseract OCR is not available or could not extract text.\n\n"
-                    "Make sure Tesseract is installed and the path is set correctly in app.py."
+        colour = score_color(score)
+
+        badge = f"badge-{status.lower()}"
+
+        short_desc = get_short_description(key, score)
+
+        owner = "-"
+        definition = "-"
+        impact = "-"
+        ideal = "-"
+
+        if key in FACTOR_INFO:
+
+            owner = FACTOR_INFO[key]["owner"]
+
+            definition = FACTOR_INFO[key]["definition"]
+
+            impact = FACTOR_INFO[key]["ocr_impact"]
+
+            ideal = FACTOR_INFO[key]["ideal_range"]
+
+        with cols[i % 2]:
+
+            with st.container(border=True):
+
+                top1, top2 = st.columns([3,1])
+
+                with top1:
+
+                    st.markdown(f"### {display}")
+
+                    st.caption(short_desc)
+
+                with top2:
+
+                    st.markdown(
+                        f"<h2 style='color:{colour};text-align:right;'>{score:.1f}</h2>",
+                        unsafe_allow_html=True
+                    )
+
+                st.progress(score/100)
+
+                st.markdown(
+                    f"""
+    <span class="badge {badge}">
+    {status}
+    </span>
+    """,
+                    unsafe_allow_html=True
                 )
 
-        with tab3:
-            for rec in recs:
-                is_warn = "🔧" in rec
-                box_cls = "rec-box warn" if is_warn else "rec-box"
-                clean = rec.replace("**","<b>",1).replace("**","</b>",1)
-                st.markdown(f'<div class="{box_cls}">{clean}</div>',
-                            unsafe_allow_html=True)
+                st.caption(
+                    f"Weight : {int(WEIGHTS[key]*100)}%"
+                )
 
-        # ── PDF Export ───────────────────────────
-        st.markdown("---")
-        st.markdown("#### Export Report")
+                with st.expander("ℹ More Information"):
+
+                    st.markdown(
+                        f"""
+    **👤 Owner**
+
+    {owner}
+
+    ---
+
+    **📖 Definition**
+
+    {definition}
+
+    ---
+
+    **🎯 OCR Impact**
+
+    {impact}
+
+    ---
+
+    **✅ Ideal Range**
+
+    {ideal}
+    """
+
+    # ======================================================
+    # ANALYSIS DETAILS
+    # ======================================================
+
+    st.markdown("---")
+
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📊 Radar Chart",
+        "📄 OCR Text",
+        "💡 Recommendations",
+        "📘 Factor Details"
+    ])
+
+    # ======================================================
+    # TAB 1
+    # ======================================================
+
+    with tab1:
+
+        st.subheader("OCR Quality Radar Chart")
+
+        st.plotly_chart(
+            make_radar(final_results),
+            use_container_width=True
+        )
+
+        st.info(
+            "The radar chart compares all 10 OCR quality factors. "
+            "A larger polygon indicates better OCR readiness."
+        )
+
+    # ======================================================
+    # TAB 2
+    # ======================================================
+
+    with tab2:
+
+        st.subheader("OCR Text Extraction")
+
+        if ocr_conf is not None:
+
+            st.success(
+                f"OCR Confidence : {ocr_conf:.1f}%"
+            )
+
+        else:
+
+            st.warning(
+                "OCR Confidence could not be calculated."
+            )
+
+        st.text_area(
+            "Extracted Text",
+            ocr_text,
+            height=350
+        )
+
+    # ======================================================
+    # TAB 3
+    # ======================================================
+
+    with tab3:
+
+        st.subheader("Recommendations")
+
+        if len(recs) == 0:
+
+            st.success(
+                "No recommendations. Image quality is excellent."
+            )
+
+        else:
+
+            for rec in recs:
+
+                st.markdown(
+                    f"""
+    <div style="
+    background:#F8FAFC;
+    border-left:5px solid #00C4B4;
+    padding:15px;
+    margin-bottom:10px;
+    border-radius:10px;
+    ">
+
+    {rec}
+
+    </div>
+    """,
+                    unsafe_allow_html=True
+                )
+
+    # ======================================================
+    # TAB 4
+    # ======================================================
+
+    with tab4:
+
+        st.subheader("Detailed Factor Information")
+
+        for key, display in DISPLAY_NAMES.items():
+
+            result = final_results.get(key, {})
+
+            score = float(
+                result.get("score", 0)
+            )
+
+            status = result.get(
+                "status",
+                "-"
+            )
+
+            with st.expander(
+                f"{display}   •   {score:.1f}/100"
+            ):
+
+                st.progress(score / 100)
+
+                st.markdown(
+                    f"### Status : {status}"
+                )
+
+                st.markdown(
+                    get_factor_description(
+                        key,
+                        score
+                    ),
+                    unsafe_allow_html=True
+                )
+
+                if key in FACTOR_INFO:
+
+                    st.markdown("---")
+
+                    st.markdown(
+                        f"**Owner** : {FACTOR_INFO[key]['owner']}"
+                    )
+
+                    st.markdown(
+                        f"**Ideal Range** : {FACTOR_INFO[key]['ideal_range']}"
+                    )
+
+                    st.markdown(
+                        f"**Formula**"
+                    )
+
+                    st.code(
+                        FACTOR_INFO[key]["formula"]
+                    )
+
+    # ======================================================
+    # EXPORT REPORT
+    # ======================================================
+
+    st.markdown("---")
+
+    st.subheader("📄 Export Report")
+
+    left, right = st.columns([3,1])
+
+    with left:
+
+        st.info(
+            """
+    Generate a professional PDF report containing
+
+    • OCR Readiness Score
+
+    • OCR Confidence
+
+    • Radar Chart
+
+    • All Factor Scores
+
+    • Recommendations
+
+    • OCR Text
+
+    • Uploaded Image
+    """
+        )
+
+    with right:
+
         pdf_bytes = generate_pdf_report(
-            image_name, final_results, ocr_readiness, ocr_conf, recs
+            image_name=image_name,
+            factor_results=final_results,
+            ocr_readiness=ocr_readiness,
+            ocr_confidence=ocr_conf,
+            recommendations=recs
         )
+
         st.download_button(
-            "📄 Download PDF Report",
+            "⬇ Download PDF Report",
             data=pdf_bytes,
-            file_name=f"ocr_report_{image_name.rsplit('.',1)[0]}.pdf",
+            file_name=f"{image_name.split('.')[0]}_OCR_Report.pdf",
             mime="application/pdf",
-            width="stretch",
+            use_container_width=True
         )
+
+    st.success("✅ Analysis Completed Successfully.")
 
 
 # ════════════════════════════════════════════════
