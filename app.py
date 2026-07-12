@@ -1591,48 +1591,48 @@ elif nav == "👥 About Team":
     team = [
 
         {
-            "Photo":"team/yash.jpg"
             "Name":"Yash Rajput",
             "Role":"Team Lead",
             "College":"Symbiosis Skills and Professional University, Pune",
             "Duration of internship":"2 Months",
             "Phone":"9811518972",
+            "Photo":"team/yash.jpg"
         },
 
         {
-            "name":"Vivek",
-            "role":"Backend Developer",
-            "college":"KCC Institute of Technology and Management",
-            "duration":"2 Months",
-            "phone":"8527890733",
-            "photo":"team/vivek.jpg"
+            "Name":"Vivek",
+            "Role":"Backend Developer",
+            "College":"KCC Institute of Technology and Management",
+            "Duration of internship":"2 Months",
+            "Phone":"8527890733",
+            "Photo":"team/vivek.jpg"
         },
 
         {
-            "name":"Mansi",
-            "role":"Backend Developer",
-            "college":"Indira Gandhi Delhi Technical University for Women (IGDTUW)",
-            "duration":"6 Weeks",
-            "phone":"9210720688",
-            "photo":"team/mansi.jpg"
+            "Name":"Mansi",
+            "Role":"Backend Developer",
+            "College":"Indira Gandhi Delhi Technical University for Women (IGDTUW)",
+            "Duration of internship":"6 Weeks",
+            "Phone":"9210720688",
+            "Photo":"team/mansi.jpg"
         },
 
         {
-            "name":"Krish",
-            "role":"Backend Developer",
-            "college":"Thapar Institute of Engineering and Technology",
-            "duration":"1 Month",
-            "phone":"9417976174",
-            "photo":"team/krish.jpg"
+            "Name":"Krish",
+            "Role":"Backend Developer",
+            "College":"Thapar Institute of Engineering and Technology",
+            "Duration of internship":"1 Month",
+            "Phone":"9417976174",
+            "Photo":"team/krish.jpg"
         },
 
         {
-            "name":"Tanusha",
-            "role":"Backend Developer",
-            "college":"Jaypee Institute of Information Technology, Noida",
-            "duration":"2 Months",
-            "phone":"8505938377",
-            "photo":"team/tanusha.jpg"
+            "Name":"Tanusha",
+            "Role":"Backend Developer",
+            "College":"Jaypee Institute of Information Technology, Noida",
+            "Duration of internship":"2 Months",
+            "Phone":"8505938377",
+            "Photo":"team/tanusha.jpg"
         }
 
     ]
