@@ -1650,6 +1650,9 @@ elif nav == "👥 About Team":
                 member["image"]
             )
 
+            st.write(path)
+            st.write(os.path.exists(path))
+
             if os.path.exists(path):
 
                 img = Image.open(path)
