@@ -1,42 +1,42 @@
-    """
-    OCR Readiness Evaluation Platform
-    SNLP Department — Team: Yash (Lead), Vivek, Mansi, Krish, Tanusha
-    Run: streamlit run app.py
-    """
+"""
+OCR Readiness Evaluation Platform
+SNLP Department — Team: Yash (Lead), Vivek, Mansi, Krish, Tanusha
+Run: streamlit run app.py
+"""
 
-    import sys, os
-    sys.path.insert(0, os.path.dirname(__file__))
+import sys, os
+sys.path.insert(0, os.path.dirname(__file__))
 
-    import numpy as np
-    import pandas as pd
-    import plotly.graph_objects as go
-    import streamlit as st
-    from PIL import Image
-    import cv2
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+from PIL import Image
+import cv2
 
-    from factors import run_all_factors, generate_recommendations, DISPLAY_NAMES, WEIGHTS
-    from factor_info import FACTOR_INFO
-    from storage import (save_result,load_results,compute_correlations,save_uploaded_image)
-    from report import generate_pdf_report
-    from descriptions import get_factor_description
-    from short_descriptions import get_short_description
-    from api_integration import call_all_team_apis, KNOWN_ISSUES, get_current_urls
-    from config_manager import load_config, save_config, build_urls, PORTS, ENDPOINTS
+from factors import run_all_factors, generate_recommendations, DISPLAY_NAMES, WEIGHTS
+from factor_info import FACTOR_INFO
+from storage import (save_result,load_results,compute_correlations,save_uploaded_image)
+from report import generate_pdf_report
+from descriptions import get_factor_description
+from short_descriptions import get_short_description
+from api_integration import call_all_team_apis, KNOWN_ISSUES, get_current_urls
+from config_manager import load_config, save_config, build_urls, PORTS, ENDPOINTS
 
-    try:
-        import pytesseract
-        # ── SET YOUR TESSERACT PATH HERE ──────────────────────────────────────
-        # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-        # ─────────────────────────────────────────────────────────────────────
-        TESSERACT_OK = True
-    except ImportError:
-        TESSERACT_OK = False
+try:
+    import pytesseract
+    # ── SET YOUR TESSERACT PATH HERE ──────────────────────────────────────
+    # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    # ─────────────────────────────────────────────────────────────────────
+    TESSERACT_OK = True
+except ImportError:
+    TESSERACT_OK = False
 
-    try:
-        from streamlit_cropper import st_cropper
-        CROPPER_OK = True
-    except ImportError:
-        CROPPER_OK = False
+try:
+    from streamlit_cropper import st_cropper
+    CROPPER_OK = True
+except ImportError:
+    CROPPER_OK = False
 
     # ── Page config ─────────────────────────────────────────────────────────────
     st.set_page_config(
@@ -1034,61 +1034,61 @@
 
                 st.subheader("💡 OCR Improvement Recommendations")
 
-            # Remove empty recommendations
-            recs = [
-                r.strip()
-                for r in recs
-                if isinstance(r, str) and r.strip()
-            ]
+                # Remove empty recommendations
+                recs = [
+                    r.strip()
+                    for r in recs
+                    if isinstance(r, str) and r.strip()
+                ]
 
-            if not recs:
+                if not recs:
 
-                st.success("🎉 Excellent Image Quality")
+                    st.success("🎉 Excellent Image Quality")
 
-                st.markdown("""
-        Your uploaded document already satisfies the recommended OCR quality standards.
+                    st.markdown("""
+Your uploaded document already satisfies the recommended OCR quality standards.
 
-        ### No improvements are required.
+### No improvements are required.
 
-        You can directly use this image for OCR processing with a high probability of obtaining accurate text extraction.
-        """)
+You can directly use this image for OCR processing with a high probability of obtaining accurate text extraction.
+""")
 
-            else:
+                else:
 
-                st.info(
-                    f"{len(recs)} recommendation(s) generated for improving OCR accuracy."
-                )
+                    st.info(
+                        f"{len(recs)} recommendation(s) generated for improving OCR accuracy."
+                    )
 
-                for i, rec in enumerate(recs, start=1):
+                    for i, rec in enumerate(recs, start=1):
 
-                    st.markdown(f"""
-        <div style="
-        background:#F8FAFC;
-        border-left:6px solid #00C4B4;
-        padding:18px;
-        border-radius:12px;
-        margin-bottom:15px;
-        ">
+                        st.markdown(f"""
+<div style="
+background:#F8FAFC;
+border-left:6px solid #00C4B4;
+padding:18px;
+border-radius:12px;
+margin-bottom:15px;
+">
 
-        <h4 style="margin-bottom:10px;color:#1A2B4A;">
-        Recommendation {i}
-        </h4>
+<h4 style="margin-bottom:10px;color:#1A2B4A;">
+Recommendation {i}
+</h4>
 
-        <p style="
-        font-size:15px;
-        line-height:1.8;
-        color:#374151;
-        margin-bottom:0px;
-        ">
-        {rec}
-        </p>
+<p style="
+font-size:15px;
+line-height:1.8;
+color:#374151;
+margin-bottom:0px;
+">
+{rec}
+</p>
 
-        </div>
-        """, unsafe_allow_html=True)
+</div>
+""", unsafe_allow_html=True)
 
-                st.success(
-                    "✔ Apply the above suggestions and re-analyse the image for improved OCR performance."
-                )
+                    st.success(
+                        "✔ Apply the above suggestions and re-analyse the image for improved OCR performance."
+                    )
 
             # ======================================================
             # TAB 3
