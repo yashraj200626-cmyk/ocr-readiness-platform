@@ -553,6 +553,12 @@ if "🏠 Analyse Image" in nav:
 
         analysis_img = st.session_state.analysis_img
 
+        temp_image_path = os.path.join(
+            os.path.dirname(__file__),
+            "uploads",
+            st.session_state.image_name
+        )
+
         # ======================================================
         # STEP 2 — Run OCR Readiness Analysis
         # ======================================================
@@ -1195,7 +1201,11 @@ margin-bottom:0px;
                     ocr_readiness=ocr_readiness,
                     ocr_confidence=ocr_conf,
                     recommendations=recs,
-                    image_path=temp_image_path,
+                    image_path=os.path.join(
+                        os.path.dirname(__file__),
+                        "uploads",
+                        st.session_state.image_name
+                    ),
                     ocr_text=ocr_text
                 )
                 
