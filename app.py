@@ -220,17 +220,22 @@ with st.sidebar:
 
     st.markdown("### Navigation")
 
-    nav = st.radio(
+    if "nav" not in st.session_state:
+        st.session_state.nav = "🏠 Analyse Image"
+
+    page = st.radio(
         "Navigation",
         [
             "🏠 Analyse Image",
-            "📊 History",
-            "---",
-            "📖 About Factors",
-            "👥 About Team",
+            "📊 History"
         ],
         label_visibility="collapsed"
     )
+
+    if page:
+        st.session_state.nav = page
+
+    nav = st.session_state.nav
 
     st.markdown("---")
     st.markdown("**Score Scale**")
@@ -264,11 +269,12 @@ with st.sidebar:
     st.markdown("### Information")
 
     if st.button("📖 About Factors", use_container_width=True):
-        nav = "📖 About Factors"
+        st.session_state.nav = "📖 About Factors"
+        st.rerun()
 
     if st.button("👥 About Team", use_container_width=True):
-        nav = "👥 About Team"
-
+        st.session_state.nav = "👥 About Team"
+        st.rerun()
 
 # ════════════════════════════════════════════════
 # PAGE 1 — Analyse Image
