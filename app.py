@@ -1603,7 +1603,7 @@ elif nav == "👥 About Team":
             "college":"Symbiosis Skills and Professional University, Pune",
             "duration":"2 Months",
             "phone":"9811518972",
-            "image":"yash.jpg"
+            "image":"yash.jpg.jpeg"
         },
         {
             "name":"Krish",
@@ -1611,7 +1611,7 @@ elif nav == "👥 About Team":
             "college":"Thapar Institute of Engineering and Technology",
             "duration":"1 Month",
             "phone":"9417976174",
-            "image":"krish.jpg"
+            "image":"krish.jpg.jpeg"
         },
         {
             "name":"Vivek",
@@ -1619,7 +1619,7 @@ elif nav == "👥 About Team":
             "college":"KCC Institute of Technology and Management",
             "duration":"2 Months",
             "phone":"8527890733",
-            "image":"vivek.jpg"
+            "image":"vivek.jpg.jpeg"
         },
         {
             "name":"Mansi",
@@ -1627,7 +1627,7 @@ elif nav == "👥 About Team":
             "college":"Indira Gandhi Delhi Technical University for Women (IGDTUW)",
             "duration":"6 Weeks",
             "phone":"9210720688",
-            "image":"mansi.jpg"
+            "image":"mansi.jpg.jpeg"
         },
         {
             "name":"Tanusha",
@@ -1635,7 +1635,7 @@ elif nav == "👥 About Team":
             "college":"Jaypee Institute of Information Technology, Noida Sector 62",
             "duration":"2 Months",
             "phone":"8505938377",
-            "image":"tanusha.jpg"
+            "image":"tanusha.jpg.jpeg"
         }
     ]
 
