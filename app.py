@@ -1638,8 +1638,21 @@ elif "👥 About Team" in nav:
 
         with st.container(border=True):
 
-            if os.path.exists(path):
-                st.image(path, width=180)
+            if os.path.exists(member["image"]):
+
+                img = Image.open(member["image"])
+
+                w, h = img.size
+                side = min(w, h)
+
+                left = (w - side) // 2
+                top = (h - side) // 2
+                right = left + side
+                bottom = top + side
+
+                img = img.crop((left, top, right, bottom))
+
+                st.image(img, width=170)
 
             st.markdown(
                 f"<h3 style='text-align:center;color:#1A2B4A'>{member['name']}</h3>",
