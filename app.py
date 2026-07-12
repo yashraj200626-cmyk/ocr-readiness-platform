@@ -994,6 +994,7 @@ if st.session_state.analysis_done:
 
     {ideal}
     """
+    )
 
     # ======================================================
     # ANALYSIS DETAILS
