@@ -1184,12 +1184,15 @@ margin-bottom:0px;
             with right:
 
                 pdf_bytes = generate_pdf_report(
-                    image_name=image_name,
-                    factor_results=final_results,
-                    ocr_readiness=ocr_readiness,
-                    ocr_confidence=ocr_conf,
-                    recommendations=recs
+                    image_name=st.image.name,
+                    factor_results=factor_results,
+                    ocr_readiness=ocr_score,
+                    ocr_confidence=ocr_confidence,
+                    recommendations=recs,
+                    image_path=temp_image_path,
+                    ocr_text=ocr_text
                 )
+                
 
                 st.download_button(
                     "⬇ Download PDF Report",
