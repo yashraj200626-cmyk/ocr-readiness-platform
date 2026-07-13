@@ -588,7 +588,16 @@ if "🏠 Analyse Image" in nav:
         st.markdown("---")
         st.markdown("## 🚀 Step 2 • Analyse Image")
 
-        with st.container(border=True):
+        with st.container():
+            st.markdown("""
+            <div style="
+            background:#1B2435;
+            border:1px solid #2E3B55;
+            border-radius:18px;
+            padding:20px;
+            box-shadow:0px 6px 18px rgba(0,0,0,0.35);
+            ">
+            """, unsafe_allow_html=True)
 
             st.subheader("🚀 Ready to Analyse")
 
@@ -1664,7 +1673,10 @@ elif nav == "👥 About Team":
 
                 img = img.crop((left, top, right, bottom))
 
-                st.image(img, width=170)
+                col1, col2, col3 = st.columns([1,2,1])
+
+                with col2:
+                    st.image(img, width=200)
 
             st.markdown(
                 f"<h3 style='text-align:center;color:#1A2B4A'>{member['name']}</h3>",
@@ -1684,6 +1696,8 @@ elif nav == "👥 About Team":
 
             st.write("📞 **Contact**")
             st.write(member["phone"])
+
+            st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("## Team Lead")
 
