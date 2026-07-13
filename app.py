@@ -167,39 +167,6 @@ def run_tesseract(img):
     except Exception:
         return None, None
 
-def make_radar(factor_results):
-    keys   = list(DISPLAY_NAMES.keys())
-    labels = [DISPLAY_NAMES[k] for k in keys]
-    scores = [factor_results.get(k,{}).get("score",0) for k in keys]
-    fig = go.Figure()
-    fig.add_trace(go.Scatterpolar(
-        r=scores+[scores[0]], theta=labels+[labels[0]],
-        fill="toself", fillcolor="rgba(0,196,180,0.15)",
-        line=dict(color="#00C4B4",width=2), name="Your Image",
-        marker=dict(color="#1A2B4A",size=7),
-    ))
-    fig.add_trace(go.Scatterpolar(
-        r=[70]*len(labels)+[70], theta=labels+[labels[0]],
-        fill="none",
-        line=dict(color="rgba(245,158,11,0.5)",width=1.5,dash="dot"),
-        name="Good threshold (70)",
-    ))
-    fig.update_layout(
-        polar=dict(
-            bgcolor="#F9FAFB",
-            radialaxis=dict(range=[0,100],tickfont=dict(size=9),
-                gridcolor="#E5E7EB",linecolor="#D1D5DB"),
-            angularaxis=dict(tickfont=dict(size=11,color="#374151"),
-                linecolor="#E5E7EB"),
-        ),
-        showlegend=True,
-        legend=dict(orientation="h",y=-0.15,font=dict(size=11)),
-        paper_bgcolor="rgba(0,0,0,0)",
-        margin=dict(t=20,b=20,l=40,r=40),
-        height=430,
-    )
-    return fig
-
 # ── Session state init ────────────────────────────────────────────────────────
 # This keeps the image and results alive when user switches pages
 if "analysis_done"    not in st.session_state: st.session_state.analysis_done    = False
@@ -220,19 +187,17 @@ with st.sidebar:
 
     st.markdown("### Navigation")
 
-    if "nav" not in st.session_state:
-        st.session_state.nav = "🏠 Analyse Image"
-
     page = st.radio(
         "Navigation",
         [
             "🏠 Analyse Image",
             "📊 History"
         ],
+        index=0 if st.session_state.nav == "🏠 Analyse Image" else 1,
         label_visibility="collapsed"
     )
 
-    if page:
+    if page != st.session_state.nav and page in ["🏠 Analyse Image", "📊 History"]:
         st.session_state.nav = page
 
     nav = st.session_state.nav
@@ -270,15 +235,17 @@ with st.sidebar:
     st.markdown("### Information")
 
     if st.button("📖 About Factors", use_container_width=True):
-        nav = "📖 About Factors"
+        st.session_state.nav = "📖 About Factors"
+        st.rerun()
 
     if st.button("👥 About Team", use_container_width=True):
-        nav = "👥 About Team"
+        st.session_state.nav = "👥 About Team"
+        st.rerun()
 
 # ════════════════════════════════════════════════
 # PAGE 1 — Analyse Image
 # ════════════════════════════════════════════════
-if "🏠 Analyse Image" in nav:
+if nav == "🏠 Analyse Image":
 
         st.markdown("""
         <div class="top-banner">
@@ -699,6 +666,8 @@ if "🏠 Analyse Image" in nav:
             st.session_state.recs = recs
 
             st.success("✅ Analysis completed successfully.")
+
+            st.rerun()
 
             # ======================================================
         # RESULTS
