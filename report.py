@@ -471,7 +471,7 @@ def generate_pdf_report(
     # NEXT PAGE
     # ==========================================================
 
-    story.append(PageBreak())
+    #story.append(PageBreak())
 
 
     # ==========================================================
