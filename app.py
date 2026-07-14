@@ -192,7 +192,16 @@ with st.sidebar:
 
     RADIO_OPTIONS = ["🏠 Analyse Image", "📊 History"]
 
-    if "nav_radio" not in st.session_state:
+    # If we just navigated to an Information page (About Factors / About Team),
+    # clear the radio's own selection. A native radio input does not fire a
+    # change event if you click the option it already thinks is selected —
+    # so without this, clicking "🏠 Analyse Image" while on an Info page would
+    # silently do nothing whenever the radio's last remembered value already
+    # happened to be "🏠 Analyse Image".
+    if st.session_state.get("_force_radio_reset", False):
+        st.session_state.nav_radio = None
+        st.session_state._force_radio_reset = False
+    elif "nav_radio" not in st.session_state:
         st.session_state.nav_radio = "🏠 Analyse Image"
 
     radio_page = st.radio(
@@ -202,13 +211,8 @@ with st.sidebar:
         label_visibility="collapsed"
     )
 
-    # Only treat this as a real navigation action if the radio's value actually
-    # changed since last run (i.e. the user clicked it). Otherwise, on reruns
-    # triggered by the "About Factors"/"About Team" buttons, the radio would
-    # keep re-reporting its own last value and clobber st.session_state.nav.
-    if radio_page != st.session_state.get("_last_radio_page", radio_page):
+    if radio_page is not None and radio_page != st.session_state.nav:
         st.session_state.nav = radio_page
-    st.session_state["_last_radio_page"] = radio_page
 
     nav = st.session_state.nav
 
@@ -246,10 +250,12 @@ with st.sidebar:
 
     if st.button("📖 About Factors", use_container_width=True):
         st.session_state.nav = "📖 About Factors"
+        st.session_state._force_radio_reset = True
         st.rerun()
 
     if st.button("👥 About Team", use_container_width=True):
         st.session_state.nav = "👥 About Team"
+        st.session_state._force_radio_reset = True
         st.rerun()
 
     nav = st.session_state.nav
