@@ -39,6 +39,24 @@ except ImportError:
     COORD_CROP_OK = False
 
 try:
+    # streamlit-drawable-canvas relies on an old internal Streamlit helper
+    # (streamlit.elements.image.image_to_url) that newer Streamlit versions
+    # removed. This shim restores it so the canvas package keeps working.
+    import streamlit.elements.image as _st_image_internal
+    import base64 as _b64
+    import io as _io
+
+    if not hasattr(_st_image_internal, "image_to_url"):
+
+        def _image_to_url_shim(image, width, clamp, channels, output_format, image_id):
+            buf = _io.BytesIO()
+            img_to_save = image if isinstance(image, Image.Image) else Image.fromarray(image)
+            img_to_save.save(buf, format="PNG")
+            b64_str = _b64.b64encode(buf.getvalue()).decode()
+            return f"data:image/png;base64,{b64_str}"
+
+        _st_image_internal.image_to_url = _image_to_url_shim
+
     from streamlit_drawable_canvas import st_canvas
     CANVAS_OK = True
 except ImportError:
