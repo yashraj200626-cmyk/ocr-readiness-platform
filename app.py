@@ -38,30 +38,6 @@ try:
 except ImportError:
     COORD_CROP_OK = False
 
-try:
-    # streamlit-drawable-canvas relies on an old internal Streamlit helper
-    # (streamlit.elements.image.image_to_url) that newer Streamlit versions
-    # removed. This shim restores it so the canvas package keeps working.
-    import streamlit.elements.image as _st_image_internal
-    import base64 as _b64
-    import io as _io
-
-    if not hasattr(_st_image_internal, "image_to_url"):
-
-        def _image_to_url_shim(image, width, clamp, channels, output_format, image_id):
-            buf = _io.BytesIO()
-            img_to_save = image if isinstance(image, Image.Image) else Image.fromarray(image)
-            img_to_save.save(buf, format="PNG")
-            b64_str = _b64.b64encode(buf.getvalue()).decode()
-            return f"data:image/png;base64,{b64_str}"
-
-        _st_image_internal.image_to_url = _image_to_url_shim
-
-    from streamlit_drawable_canvas import st_canvas
-    CANVAS_OK = True
-except ImportError:
-    CANVAS_OK = False
-
 if "nav" not in st.session_state:
     st.session_state.nav = "🏠 Analyse Image"
 
@@ -168,6 +144,12 @@ html,body,[class*="css"]{font-family:'Inter',sans-serif;}
     font-size:13px;color:#374151;line-height:1.6;margin-top:8px;}
 
 .clear-btn{text-align:right;margin-bottom:8px;}
+
+/* Selectbox: keep it click-to-choose, remove the "typing" look */
+[data-baseweb="select"] input{
+    caret-color:transparent !important;
+    cursor:pointer !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -396,83 +378,7 @@ if nav == "🏠 Analyse Image":
 
         if use_crop:
 
-            if CANVAS_OK:
-
-                st.markdown(
-                    "🖱️ Click and drag on the image below to draw a crop box — just like a screenshot tool."
-                )
-
-                img_w, img_h = raw_pil.size
-                max_canvas_w = 700
-                scale = min(1.0, max_canvas_w / img_w)
-                canvas_w = int(img_w * scale)
-                canvas_h = int(img_h * scale)
-
-                canvas_result = st_canvas(
-                    fill_color="rgba(0, 196, 180, 0.25)",
-                    stroke_width=2,
-                    stroke_color="#00C4B4",
-                    background_image=raw_pil,
-                    height=canvas_h,
-                    width=canvas_w,
-                    drawing_mode="rect",
-                    key=f"crop_canvas_{image_name}",
-                    update_streamlit=True,
-                )
-
-                cropped = raw_pil
-
-                if (
-                    canvas_result.json_data is not None
-                    and len(canvas_result.json_data.get("objects", [])) > 0
-                ):
-
-                    obj = canvas_result.json_data["objects"][-1]
-
-                    box_left = obj["left"] / scale
-                    box_top = obj["top"] / scale
-                    box_w = obj["width"] * obj.get("scaleX", 1) / scale
-                    box_h = obj["height"] * obj.get("scaleY", 1) / scale
-
-                    box_right = max(0, min(img_w, int(box_left + box_w)))
-                    box_bottom = max(0, min(img_h, int(box_top + box_h)))
-                    box_left = max(0, min(img_w, int(box_left)))
-                    box_top = max(0, min(img_h, int(box_top)))
-
-                    if box_right - box_left > 5 and box_bottom - box_top > 5:
-                        cropped = raw_pil.crop(
-                            (box_left, box_top, box_right, box_bottom)
-                        )
-
-                col_a, col_b = st.columns([3, 1])
-
-                with col_a:
-
-                    st.image(
-                        cropped,
-                        caption="Selected Region",
-                        use_container_width=True
-                    )
-
-                with col_b:
-
-                    width, height = cropped.size
-
-                    st.metric(
-                        "Width",
-                        f"{width}px"
-                    )
-
-                    st.metric(
-                        "Height",
-                        f"{height}px"
-                    )
-
-                    st.success("Ready for Analysis")
-
-                st.session_state.analysis_img = cropped
-
-            elif COORD_CROP_OK:
+            if COORD_CROP_OK:
 
                 n_pts = len(st.session_state.crop_points)
 
@@ -549,8 +455,8 @@ if nav == "🏠 Analyse Image":
             else:
 
                 st.warning(
-                    "No cropping package installed. Using manual crop sliders. "
-                    "Install one with: pip install streamlit-drawable-canvas"
+                    "streamlit-image-coordinates not installed. Using manual crop sliders. "
+                    "Install it with: pip install streamlit-image-coordinates"
                 )
 
                 img_w, img_h = raw_pil.size
@@ -1511,11 +1417,10 @@ elif nav == "📖 About Factors":
       <p>Definition · Importance · Formula · OCR Impact · Ideal Range</p>
     </div>""", unsafe_allow_html=True)
 
-    selected = st.radio(
+    selected = st.selectbox(
         "Select a Quality Factor",
         options=list(FACTOR_INFO.keys()),
         format_func=lambda k: FACTOR_INFO[k]["display_name"],
-        horizontal=True,
     )
     info = FACTOR_INFO[selected]
 
