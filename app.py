@@ -511,27 +511,6 @@ if nav == "🏠 Analyse Image":
         """
         )
 
-        with st.container(border=True):
-            st.subheader("🚀 Ready to Analyse")
-
-            st.write(
-                "Click the **Analyse Image** button below to begin the OCR Readiness Evaluation."
-            )
-
-            st.markdown("""
-        ### The platform will automatically
-
-        - ✅ Analyse all **10 OCR Quality Factors**
-        - ✅ Calculate the **OCR Readiness Score**
-        - ✅ Estimate **OCR Confidence**
-        - ✅ Generate **Personalized Recommendations**
-        - ✅ Save this analysis into **History**
-        - ✅ Generate a **Professional PDF Report**
-
-        ---
-        Once the analysis is complete, detailed factor scores, OCR text, and improvement suggestions will be displayed automatically.
-        """)
-
         analyse = st.button(
             "🚀 Analyse Image",
             use_container_width=True,
@@ -645,37 +624,6 @@ if nav == "🏠 Analyse Image":
             # ==================================================
             # API Summary
             # ==================================================
-
-            with st.expander("🔌 Team API Status"):
-
-                for key, src in api_status.items():
-
-                    disp = DISPLAY_NAMES.get(key, key)
-
-                    if "Yash" in src:
-                        css = "api-yash"
-
-                    elif "Vivek" in src:
-                        css = "api-vivek"
-
-                    elif "Mansi" in src:
-                        css = "api-mansi"
-
-                    elif "Krish" in src:
-                        css = "api-krish"
-
-                    elif "Tanusha" in src:
-                        css = "api-tanusha"
-
-                    else:
-                        css = "api-local"
-
-                    st.markdown(
-                        f'<div class="api-row {css}"><b>{disp}</b> : {src}</div>',
-                        unsafe_allow_html=True
-                    )
-
-            st.markdown("<br>", unsafe_allow_html=True)
 
             # ==================================================
             # SCORE CARDS
