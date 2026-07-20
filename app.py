@@ -147,23 +147,6 @@ html,body,[class*="css"]{font-family:'Inter',sans-serif;}
 </style>
 """, unsafe_allow_html=True)
 
-# ── Make every selectbox click-only (no free typing in the search field) ──
-import streamlit.components.v1 as components
-components.html("""
-<script>
-function lockSelectInputs() {
-    const doc = window.parent.document;
-    const inputs = doc.querySelectorAll('[data-baseweb="select"] input');
-    inputs.forEach((inp) => {
-        inp.setAttribute('readonly', 'readonly');
-    });
-}
-lockSelectInputs();
-const observer = new MutationObserver(lockSelectInputs);
-observer.observe(window.parent.document.body, {childList: true, subtree: true});
-</script>
-""", height=0)
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 def pil_to_bgr(img):
@@ -1427,10 +1410,11 @@ elif nav == "📖 About Factors":
       <p>Definition · Importance · Formula · OCR Impact · Ideal Range</p>
     </div>""", unsafe_allow_html=True)
 
-    selected = st.selectbox(
+    selected = st.radio(
         "Select a Quality Factor",
         options=list(FACTOR_INFO.keys()),
         format_func=lambda k: FACTOR_INFO[k]["display_name"],
+        horizontal=True,
     )
     info = FACTOR_INFO[selected]
 
