@@ -295,7 +295,7 @@ if nav == "🏠 Analyse Image":
             <div style="
                 background:linear-gradient(135deg,#1A2B4A,#0F3460);
                 border-radius:20px;
-                padding:45px;
+                padding:35px 45px;
                 margin-top:20px;
                 text-align:center;
                 border:1px solid #304878;
@@ -303,96 +303,28 @@ if nav == "🏠 Analyse Image":
 
             <h2 style="
                 color:#5B8CFF;
-                margin-bottom:20px;
-                font-size:30px;
+                margin-bottom:14px;
+                font-size:26px;
             ">
                 👋 Welcome
             </h2>
 
             <p style="
                 color:white;
-                font-size:18px;
-                line-height:1.8;
+                font-size:16px;
+                line-height:1.6;
+                margin-bottom:10px;
             ">
-
-            This platform evaluates whether a document image is suitable
-            for Optical Character Recognition (OCR).
-
-            <br><br>
-
-            It automatically analyses
-
-            <br>
-
-            ✅ Noise
-
-            <br>
-
-            ✅ Resolution
-
-            <br>
-
-            ✅ Blur
-
-            <br>
-
-            ✅ Contrast
-
-            <br>
-
-            ✅ Text Density
-
-            <br>
-
-            ✅ Stroke Width
-
-            <br>
-
-            ✅ Matra Continuity
-
-            <br>
-
-            ✅ Zone Integrity
-
-            <br>
-
-            ✅ Connected Components
-
-            <br>
-
-            ✅ Skew Detection
-
-            <br><br>
-
-            After analysis, you'll receive
-
-            <br><br>
-
-            📊 OCR Readiness Score
-
-            <br>
-
-            📄 OCR Confidence
-
-            <br>
-
-            💡 Improvement Suggestions
-
-            <br>
-
-            📥 Downloadable PDF Report
-
-            <br><br>
+            This platform evaluates whether a document image is suitable for Optical Character Recognition (OCR).
+            </p>
 
             <span style="
                 color:#5B8CFF;
-                font-size:20px;
+                font-size:18px;
                 font-weight:bold;
             ">
             ⬆ Upload an image above to begin.
             </span>
-
-            </p>
 
             </div>
             """, unsafe_allow_html=True)
@@ -1302,44 +1234,14 @@ elif "📊 History" in nav:
     st.divider()
 
     # -----------------------------------------
-    # Time Sorting
+    # Sort by most recent first (fixed order)
     # -----------------------------------------
-
-    left, right = st.columns([3,2])
-
-    with left:
-        search = st.text_input(
-            "🔍 Search Image",
-            placeholder="Enter image name..."
-        )
-
-    with right:
-        order = st.radio(
-            "Time",
-            [
-                "Descending",
-                "Ascending"
-            ],
-            horizontal=True
-        )
-
-    ascending = order == "Ascending"
-
-    if search.strip():
-        df = df[
-            df["image_name"]
-            .str.contains(
-                search,
-                case=False,
-                na=False
-            )
-        ]
 
     df["timestamp"] = pd.to_datetime(df["timestamp"])
 
     df = df.sort_values(
         "timestamp",
-        ascending=ascending
+        ascending=False
     ).reset_index(drop=True)
     st.caption(f"Showing {len(df)} analyses")
 
