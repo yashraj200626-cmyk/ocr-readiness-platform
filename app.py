@@ -33,10 +33,10 @@ except ImportError:
     TESSERACT_OK = False
 
 try:
-    from streamlit_cropper import st_cropper
-    CROPPER_OK = True
+    from streamlit_image_coordinates import streamlit_image_coordinates
+    COORD_CROP_OK = True
 except ImportError:
-    CROPPER_OK = False
+    COORD_CROP_OK = False
 
 if "nav" not in st.session_state:
     st.session_state.nav = "🏠 Analyse Image"
@@ -147,6 +147,23 @@ html,body,[class*="css"]{font-family:'Inter',sans-serif;}
 </style>
 """, unsafe_allow_html=True)
 
+# ── Make every selectbox click-only (no free typing in the search field) ──
+import streamlit.components.v1 as components
+components.html("""
+<script>
+function lockSelectInputs() {
+    const doc = window.parent.document;
+    const inputs = doc.querySelectorAll('[data-baseweb="select"] input');
+    inputs.forEach((inp) => {
+        inp.setAttribute('readonly', 'readonly');
+    });
+}
+lockSelectInputs();
+const observer = new MutationObserver(lockSelectInputs);
+observer.observe(window.parent.document.body, {childList: true, subtree: true});
+</script>
+""", height=0)
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 def pil_to_bgr(img):
@@ -182,6 +199,8 @@ if "raw_pil"          not in st.session_state: st.session_state.raw_pil         
 if "analysis_img"     not in st.session_state: st.session_state.analysis_img     = None
 if "recs"             not in st.session_state: st.session_state.recs             = []
 if "card_info_open"   not in st.session_state: st.session_state.card_info_open   = {}
+if "crop_points"      not in st.session_state: st.session_state.crop_points      = []
+if "crop_click_ver"   not in st.session_state: st.session_state.crop_click_ver   = 0
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -346,6 +365,8 @@ if nav == "🏠 Analyse Image":
                 st.session_state.analysis_done = False
                 st.session_state.final_results = {}
                 st.session_state.analysis_img = raw_pil
+                st.session_state.crop_points = []
+                st.session_state.crop_click_ver += 1
 
         raw_pil = st.session_state.raw_pil
         image_name = st.session_state.image_name
@@ -368,51 +389,84 @@ if nav == "🏠 Analyse Image":
 
         if use_crop:
 
-            if CROPPER_OK:
+            if COORD_CROP_OK:
 
-                st.markdown(
-                    "Drag the handles below to select the portion you want to analyse."
-                )
+                n_pts = len(st.session_state.crop_points)
 
-                cropped = st_cropper(
+                if n_pts == 0:
+                    st.markdown("👉 **Step 1:** Click the **first corner** of the area you want to keep.")
+                elif n_pts == 1:
+                    st.markdown("👉 **Step 2:** Click the **opposite corner** to complete the box.")
+                else:
+                    st.markdown("✅ Both corners selected. Click **Reset Corners** to pick again.")
+
+                coords = streamlit_image_coordinates(
                     raw_pil,
-                    realtime_update=True,
-                    box_color="#00C4B4",
-                    aspect_ratio=None
+                    key=f"crop_click_{st.session_state.crop_click_ver}"
                 )
 
-                left, right = st.columns([3,1])
+                if coords is not None and n_pts < 2:
 
-                with left:
+                    point = (int(coords["x"]), int(coords["y"]))
+                    last_point = st.session_state.crop_points[-1] if st.session_state.crop_points else None
 
-                    st.image(
-                        cropped,
-                        caption="Selected Region",
-                        use_container_width=True
-                    )
+                    if point != last_point:
+                        st.session_state.crop_points.append(point)
+                        st.rerun()
 
-                with right:
+                if st.button("↺ Reset Corners"):
+                    st.session_state.crop_points = []
+                    st.session_state.crop_click_ver += 1
+                    st.rerun()
 
-                    width, height = cropped.size
+                if len(st.session_state.crop_points) == 2:
 
-                    st.metric(
-                        "Width",
-                        f"{width}px"
-                    )
+                    (x1, y1), (x2, y2) = st.session_state.crop_points
+                    left, right = sorted([x1, x2])
+                    top, bottom = sorted([y1, y2])
 
-                    st.metric(
-                        "Height",
-                        f"{height}px"
-                    )
+                    if right - left < 5:
+                        right = left + 5
+                    if bottom - top < 5:
+                        bottom = top + 5
 
-                    st.success("Ready for Analysis")
+                    cropped = raw_pil.crop((left, top, right, bottom))
 
-                st.session_state.analysis_img = cropped
+                    col_a, col_b = st.columns([3, 1])
+
+                    with col_a:
+
+                        st.image(
+                            cropped,
+                            caption="Selected Region",
+                            use_container_width=True
+                        )
+
+                    with col_b:
+
+                        width, height = cropped.size
+
+                        st.metric(
+                            "Width",
+                            f"{width}px"
+                        )
+
+                        st.metric(
+                            "Height",
+                            f"{height}px"
+                        )
+
+                        st.success("Ready for Analysis")
+
+                    st.session_state.analysis_img = cropped
+
+                else:
+                    st.session_state.analysis_img = raw_pil
 
             else:
 
                 st.warning(
-                    "Cropper package not installed. Using manual crop sliders."
+                    "streamlit-image-coordinates not installed. Using manual crop sliders."
                 )
 
                 img_w, img_h = raw_pil.size
