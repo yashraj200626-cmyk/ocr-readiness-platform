@@ -75,6 +75,16 @@ try:
 except ImportError:
     CANVAS_OK = False
 
+try:
+    # Local, self-contained component — a real native <select> dropdown.
+    # Unlike st.selectbox (a searchable combobox you can type into), this
+    # has no text field at all, so the cursor is always a plain pointer,
+    # never editable/writable. Lives in ./click_select_widget next to app.py.
+    from click_select_widget import click_select
+    CLICK_SELECT_OK = True
+except ImportError:
+    CLICK_SELECT_OK = False
+
 if "nav" not in st.session_state:
     st.session_state.nav = "🏠 Analyse Image"
 
@@ -181,14 +191,6 @@ html,body,[class*="css"]{font-family:'Inter',sans-serif;}
     font-size:13px;color:#374151;line-height:1.6;margin-top:8px;}
 
 .clear-btn{text-align:right;margin-bottom:8px;}
-
-/* Selectbox: keep it click-to-choose, block typing entirely */
-[data-baseweb="select"] input{
-    caret-color:transparent !important;
-    cursor:pointer !important;
-    pointer-events:none !important;
-    user-select:none !important;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1415,10 +1417,17 @@ elif "📊 History" in nav:
 
     image_list = df["image_name"].tolist()
 
-    selected_image = st.selectbox(
-        "Select Image",
-        image_list
-    )
+    if CLICK_SELECT_OK:
+        selected_image = click_select(
+            "Select Image",
+            image_list,
+            key="history_image_select"
+        )
+    else:
+        selected_image = st.selectbox(
+            "Select Image",
+            image_list
+        )
 
     image_path = os.path.join(
         uploads_folder,
@@ -1537,11 +1546,19 @@ elif nav == "📖 About Factors":
       <p>Definition · Importance · Formula · OCR Impact · Ideal Range</p>
     </div>""", unsafe_allow_html=True)
 
-    selected = st.selectbox(
-        "Select a Quality Factor",
-        options=list(FACTOR_INFO.keys()),
-        format_func=lambda k: FACTOR_INFO[k]["display_name"],
-    )
+    if CLICK_SELECT_OK:
+        selected = click_select(
+            "Select a Quality Factor",
+            list(FACTOR_INFO.keys()),
+            format_func=lambda k: FACTOR_INFO[k]["display_name"],
+            key="factor_select"
+        )
+    else:
+        selected = st.selectbox(
+            "Select a Quality Factor",
+            options=list(FACTOR_INFO.keys()),
+            format_func=lambda k: FACTOR_INFO[k]["display_name"],
+        )
     info = FACTOR_INFO[selected]
 
     # ── Main info card using native Streamlit ──

@@ -1,0 +1,22 @@
+body {
+  margin: 0;
+  font-family: "Source Sans Pro", sans-serif;
+}
+
+#dropdown {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  font-size: 15px;
+  border-radius: 8px;
+  border: 1px solid #4B5563;
+  background-color: #262730;
+  color: #FAFAFA;
+  cursor: pointer;
+  -webkit-appearance: menulist;
+  appearance: menulist;
+}
+
+#dropdown:focus {
+  outline: 2px solid #00C4B4;
+}
