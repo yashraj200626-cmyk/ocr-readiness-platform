@@ -25,65 +25,29 @@ from config_manager import load_config, save_config, build_urls, PORTS, ENDPOINT
 
 try:
     import pytesseract
+    tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if os.path.exists(tesseract_cmd):
+        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
     # ── SET YOUR TESSERACT PATH HERE ──────────────────────────────────────
     # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
     # ─────────────────────────────────────────────────────────────────────
-    TESSERACT_OK = True
+    try:
+        pytesseract.get_tesseract_version()
+        TESSERACT_OK = True
+        TESSERACT_ERROR = None
+    except Exception as e:
+        TESSERACT_OK = False
+        TESSERACT_ERROR = str(e)
 except ImportError:
+    pytesseract = None
     TESSERACT_OK = False
+    TESSERACT_ERROR = "pytesseract is not installed."
 
 try:
-    from streamlit_image_coordinates import streamlit_image_coordinates
-    COORD_CROP_OK = True
+    from streamlit_cropper import st_cropper
+    CROPPER_OK = True
 except ImportError:
-    COORD_CROP_OK = False
-
-try:
-    # streamlit-drawable-canvas calls an old internal Streamlit helper
-    # (streamlit.elements.image.image_to_url) that newer Streamlit versions
-    # removed. We restore it here, routed through Streamlit's real media
-    # server (not a base64 data-URI) so the background image actually
-    # renders instead of showing blank/black.
-    import streamlit.elements.image as _st_image_internal
-
-    if not hasattr(_st_image_internal, "image_to_url"):
-
-        def _image_to_url_shim(image, width, clamp, channels, output_format, image_id):
-            try:
-                from streamlit.elements.lib.image_utils import (
-                    image_to_url as _real_image_to_url,
-                )
-                from streamlit.elements.lib.layout_utils import create_layout_config
-                layout_config = create_layout_config(width=width)
-                return _real_image_to_url(
-                    image, layout_config, clamp, channels, output_format, image_id
-                )
-            except Exception:
-                # Older/newer Streamlit internals moved things around —
-                # fall back to a base64 data URI as a last resort.
-                import base64, io
-                buf = io.BytesIO()
-                img_to_save = image if isinstance(image, Image.Image) else Image.fromarray(image)
-                img_to_save.save(buf, format="PNG")
-                b64_str = base64.b64encode(buf.getvalue()).decode()
-                return f"data:image/png;base64,{b64_str}"
-
-        _st_image_internal.image_to_url = _image_to_url_shim
-
-    from streamlit_drawable_canvas import st_canvas
-    CANVAS_OK = True
-except ImportError:
-    CANVAS_OK = False
-
-try:
-    # Local, self-contained component — a real native <select> dropdown.
-    # Unlike st.selectbox (a searchable combobox you can type into), this
-    # has no text field at all, so the cursor is always a plain pointer,
-    # never editable/writable. Lives in ./click_select_widget next to app.py.
-    from click_select_widget import click_select
-    CLICK_SELECT_OK = True
-except ImportError:
-    CLICK_SELECT_OK = False
+    CROPPER_OK = False
 
 if "nav" not in st.session_state:
     st.session_state.nav = "🏠 Analyse Image"
@@ -229,8 +193,6 @@ if "raw_pil"          not in st.session_state: st.session_state.raw_pil         
 if "analysis_img"     not in st.session_state: st.session_state.analysis_img     = None
 if "recs"             not in st.session_state: st.session_state.recs             = []
 if "card_info_open"   not in st.session_state: st.session_state.card_info_open   = {}
-if "crop_points"      not in st.session_state: st.session_state.crop_points      = []
-if "crop_click_ver"   not in st.session_state: st.session_state.crop_click_ver   = 0
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -344,7 +306,7 @@ if nav == "🏠 Analyse Image":
             <div style="
                 background:linear-gradient(135deg,#1A2B4A,#0F3460);
                 border-radius:20px;
-                padding:35px 45px;
+                padding:45px;
                 margin-top:20px;
                 text-align:center;
                 border:1px solid #304878;
@@ -352,28 +314,96 @@ if nav == "🏠 Analyse Image":
 
             <h2 style="
                 color:#5B8CFF;
-                margin-bottom:14px;
-                font-size:26px;
+                margin-bottom:20px;
+                font-size:30px;
             ">
                 👋 Welcome
             </h2>
 
             <p style="
                 color:white;
-                font-size:16px;
-                line-height:1.6;
-                margin-bottom:10px;
+                font-size:18px;
+                line-height:1.8;
             ">
-            This platform evaluates whether a document image is suitable for Optical Character Recognition (OCR).
-            </p>
+
+            This platform evaluates whether a document image is suitable
+            for Optical Character Recognition (OCR).
+
+            <br><br>
+
+            It automatically analyses
+
+            <br>
+
+            ✅ Noise
+
+            <br>
+
+            ✅ Resolution
+
+            <br>
+
+            ✅ Blur
+
+            <br>
+
+            ✅ Contrast
+
+            <br>
+
+            ✅ Text Density
+
+            <br>
+
+            ✅ Stroke Width
+
+            <br>
+
+            ✅ Matra Continuity
+
+            <br>
+
+            ✅ Zone Integrity
+
+            <br>
+
+            ✅ Connected Components
+
+            <br>
+
+            ✅ Skew Detection
+
+            <br><br>
+
+            After analysis, you'll receive
+
+            <br><br>
+
+            📊 OCR Readiness Score
+
+            <br>
+
+            📄 OCR Confidence
+
+            <br>
+
+            💡 Improvement Suggestions
+
+            <br>
+
+            📥 Downloadable PDF Report
+
+            <br><br>
 
             <span style="
                 color:#5B8CFF;
-                font-size:18px;
+                font-size:20px;
                 font-weight:bold;
             ">
             ⬆ Upload an image above to begin.
             </span>
+
+            </p>
 
             </div>
             """, unsafe_allow_html=True)
@@ -395,8 +425,6 @@ if nav == "🏠 Analyse Image":
                 st.session_state.analysis_done = False
                 st.session_state.final_results = {}
                 st.session_state.analysis_img = raw_pil
-                st.session_state.crop_points = []
-                st.session_state.crop_click_ver += 1
 
         raw_pil = st.session_state.raw_pil
         image_name = st.session_state.image_name
@@ -419,62 +447,22 @@ if nav == "🏠 Analyse Image":
 
         if use_crop:
 
-            if CANVAS_OK:
+            if CROPPER_OK:
 
                 st.markdown(
-                    "🖱️ Click and drag on the image below to draw a crop box — just like a screenshot tool."
+                    "Drag the handles below to select the portion you want to analyse."
                 )
 
-                img_w, img_h = raw_pil.size
-                max_canvas_w = 700
-                scale = min(1.0, max_canvas_w / img_w)
-                canvas_w = int(img_w * scale)
-                canvas_h = int(img_h * scale)
-
-                canvas_result = st_canvas(
-                    fill_color="rgba(0, 196, 180, 0.25)",
-                    stroke_width=2,
-                    stroke_color="#00C4B4",
-                    background_image=raw_pil,
-                    height=canvas_h,
-                    width=canvas_w,
-                    drawing_mode="rect",
-                    display_toolbar=False,
-                    key=f"crop_canvas_{st.session_state.crop_click_ver}_{image_name}",
-                    update_streamlit=True,
+                cropped = st_cropper(
+                    raw_pil,
+                    realtime_update=True,
+                    box_color="#00C4B4",
+                    aspect_ratio=None
                 )
 
-                if st.button("↺ Reset Selection"):
-                    st.session_state.crop_click_ver += 1
-                    st.rerun()
+                left, right = st.columns([3,1])
 
-                cropped = raw_pil
-
-                if (
-                    canvas_result.json_data is not None
-                    and len(canvas_result.json_data.get("objects", [])) > 0
-                ):
-
-                    obj = canvas_result.json_data["objects"][-1]
-
-                    box_left = obj["left"] / scale
-                    box_top = obj["top"] / scale
-                    box_w = obj["width"] * obj.get("scaleX", 1) / scale
-                    box_h = obj["height"] * obj.get("scaleY", 1) / scale
-
-                    box_right = max(0, min(img_w, int(box_left + box_w)))
-                    box_bottom = max(0, min(img_h, int(box_top + box_h)))
-                    box_left = max(0, min(img_w, int(box_left)))
-                    box_top = max(0, min(img_h, int(box_top)))
-
-                    if box_right - box_left > 5 and box_bottom - box_top > 5:
-                        cropped = raw_pil.crop(
-                            (box_left, box_top, box_right, box_bottom)
-                        )
-
-                col_a, col_b = st.columns([3, 1])
-
-                with col_a:
+                with left:
 
                     st.image(
                         cropped,
@@ -482,7 +470,7 @@ if nav == "🏠 Analyse Image":
                         use_container_width=True
                     )
 
-                with col_b:
+                with right:
 
                     width, height = cropped.size
 
@@ -500,85 +488,10 @@ if nav == "🏠 Analyse Image":
 
                 st.session_state.analysis_img = cropped
 
-            elif COORD_CROP_OK:
-
-                n_pts = len(st.session_state.crop_points)
-
-                if n_pts == 0:
-                    st.markdown("👉 **Step 1:** Click the **first corner** of the area you want to keep.")
-                elif n_pts == 1:
-                    st.markdown("👉 **Step 2:** Click the **opposite corner** to complete the box.")
-                else:
-                    st.markdown("✅ Both corners selected. Click **Reset Corners** to pick again.")
-
-                coords = streamlit_image_coordinates(
-                    raw_pil,
-                    key=f"crop_click_{st.session_state.crop_click_ver}"
-                )
-
-                if coords is not None and n_pts < 2:
-
-                    point = (int(coords["x"]), int(coords["y"]))
-                    last_point = st.session_state.crop_points[-1] if st.session_state.crop_points else None
-
-                    if point != last_point:
-                        st.session_state.crop_points.append(point)
-                        st.rerun()
-
-                if st.button("↺ Reset Corners"):
-                    st.session_state.crop_points = []
-                    st.session_state.crop_click_ver += 1
-                    st.rerun()
-
-                if len(st.session_state.crop_points) == 2:
-
-                    (x1, y1), (x2, y2) = st.session_state.crop_points
-                    left, right = sorted([x1, x2])
-                    top, bottom = sorted([y1, y2])
-
-                    if right - left < 5:
-                        right = left + 5
-                    if bottom - top < 5:
-                        bottom = top + 5
-
-                    cropped = raw_pil.crop((left, top, right, bottom))
-
-                    col_a, col_b = st.columns([3, 1])
-
-                    with col_a:
-
-                        st.image(
-                            cropped,
-                            caption="Selected Region",
-                            use_container_width=True
-                        )
-
-                    with col_b:
-
-                        width, height = cropped.size
-
-                        st.metric(
-                            "Width",
-                            f"{width}px"
-                        )
-
-                        st.metric(
-                            "Height",
-                            f"{height}px"
-                        )
-
-                        st.success("Ready for Analysis")
-
-                    st.session_state.analysis_img = cropped
-
-                else:
-                    st.session_state.analysis_img = raw_pil
-
             else:
 
                 st.warning(
-                    "streamlit-image-coordinates not installed. Using manual crop sliders. "
-                    "Install it with: pip install streamlit-image-coordinates"
+                    "Cropper package not installed. Using manual crop sliders."
                 )
 
                 img_w, img_h = raw_pil.size
@@ -676,6 +589,27 @@ if nav == "🏠 Analyse Image":
         The platform will evaluate all **10 OCR Quality Factors**, calculate the **OCR Readiness Score**, estimate **OCR Confidence**, generate personalized improvement recommendations, and prepare a professional PDF report based on the uploaded document.
         """
         )
+
+        with st.container(border=True):
+            st.subheader("🚀 Ready to Analyse")
+
+            st.write(
+                "Click the **Analyse Image** button below to begin the OCR Readiness Evaluation."
+            )
+
+            st.markdown("""
+        ### The platform will automatically
+
+        - ✅ Analyse all **10 OCR Quality Factors**
+        - ✅ Calculate the **OCR Readiness Score**
+        - ✅ Estimate **OCR Confidence**
+        - ✅ Generate **Personalized Recommendations**
+        - ✅ Save this analysis into **History**
+        - ✅ Generate a **Professional PDF Report**
+
+        ---
+        Once the analysis is complete, detailed factor scores, OCR text, and improvement suggestions will be displayed automatically.
+        """)
 
         analyse = st.button(
             "🚀 Analyse Image",
@@ -790,6 +724,37 @@ if nav == "🏠 Analyse Image":
             # ==================================================
             # API Summary
             # ==================================================
+
+            with st.expander("🔌 Team API Status"):
+
+                for key, src in api_status.items():
+
+                    disp = DISPLAY_NAMES.get(key, key)
+
+                    if "Yash" in src:
+                        css = "api-yash"
+
+                    elif "Vivek" in src:
+                        css = "api-vivek"
+
+                    elif "Mansi" in src:
+                        css = "api-mansi"
+
+                    elif "Krish" in src:
+                        css = "api-krish"
+
+                    elif "Tanusha" in src:
+                        css = "api-tanusha"
+
+                    else:
+                        css = "api-local"
+
+                    st.markdown(
+                        f'<div class="api-row {css}"><b>{disp}</b> : {src}</div>',
+                        unsafe_allow_html=True
+                    )
+
+            st.markdown("<br>", unsafe_allow_html=True)
 
             # ==================================================
             # SCORE CARDS
@@ -1348,14 +1313,44 @@ elif "📊 History" in nav:
     st.divider()
 
     # -----------------------------------------
-    # Sort by most recent first (fixed order)
+    # Time Sorting
     # -----------------------------------------
+
+    left, right = st.columns([3,2])
+
+    with left:
+        search = st.text_input(
+            "🔍 Search Image",
+            placeholder="Enter image name..."
+        )
+
+    with right:
+        order = st.radio(
+            "Time",
+            [
+                "Descending",
+                "Ascending"
+            ],
+            horizontal=True
+        )
+
+    ascending = order == "Ascending"
+
+    if search.strip():
+        df = df[
+            df["image_name"]
+            .str.contains(
+                search,
+                case=False,
+                na=False
+            )
+        ]
 
     df["timestamp"] = pd.to_datetime(df["timestamp"])
 
     df = df.sort_values(
         "timestamp",
-        ascending=False
+        ascending=ascending
     ).reset_index(drop=True)
     st.caption(f"Showing {len(df)} analyses")
 
@@ -1417,17 +1412,10 @@ elif "📊 History" in nav:
 
     image_list = df["image_name"].tolist()
 
-    if CLICK_SELECT_OK:
-        selected_image = click_select(
-            "Select Image",
-            image_list,
-            key="history_image_select"
-        )
-    else:
-        selected_image = st.selectbox(
-            "Select Image",
-            image_list
-        )
+    selected_image = st.selectbox(
+        "Select Image",
+        image_list
+    )
 
     image_path = os.path.join(
         uploads_folder,
@@ -1546,19 +1534,11 @@ elif nav == "📖 About Factors":
       <p>Definition · Importance · Formula · OCR Impact · Ideal Range</p>
     </div>""", unsafe_allow_html=True)
 
-    if CLICK_SELECT_OK:
-        selected = click_select(
-            "Select a Quality Factor",
-            list(FACTOR_INFO.keys()),
-            format_func=lambda k: FACTOR_INFO[k]["display_name"],
-            key="factor_select"
-        )
-    else:
-        selected = st.selectbox(
-            "Select a Quality Factor",
-            options=list(FACTOR_INFO.keys()),
-            format_func=lambda k: FACTOR_INFO[k]["display_name"],
-        )
+    selected = st.selectbox(
+        "Select a Quality Factor",
+        options=list(FACTOR_INFO.keys()),
+        format_func=lambda k: FACTOR_INFO[k]["display_name"],
+    )
     info = FACTOR_INFO[selected]
 
     # ── Main info card using native Streamlit ──

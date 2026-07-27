@@ -249,6 +249,7 @@ def contrast_score(img_bgr: np.ndarray) -> Dict[str, Any]:
         gray = img_bgr.copy()
 
     h, w = gray.shape
+    pixels = h * w
 
     # Robust contrast using percentiles
     p5 = float(np.percentile(gray, 5))
@@ -257,15 +258,24 @@ def contrast_score(img_bgr: np.ndarray) -> Dict[str, Any]:
 
     # Normalize contrast to 0-100
     # 20 = very poor, 180 = excellent
-    #
-    # FIXED: this factor used to also apply a "resolution penalty" that
-    # multiplied the score down for smaller images. That silently double-
-    # counted resolution — it's already its own dedicated weighted factor
-    # (resolution_score) — which meant small/cropped images got punished
-    # twice for the same thing and their contrast score no longer measured
-    # actual text/background contrast at all. Contrast is now scored purely
-    # on its own merits.
-    final_score = ((contrast - 20) / (180 - 20)) * 100
+    base_score = ((contrast - 20) / (180 - 20)) * 100
+    base_score = float(np.clip(base_score, 0, 100))
+
+    # --------------------------------------------------
+    # Resolution penalty for OCR
+    # Small images lose character details
+    # --------------------------------------------------
+    if pixels >= 1_000_000:
+        res_factor = 1.0      # High resolution
+    elif pixels >= 500_000:
+        res_factor = 0.90
+    elif pixels >= 250_000:
+        res_factor = 0.80
+    else:
+        res_factor = 0.70     # Very small documents
+
+    # Keep some contrast credit even for low resolution
+    final_score = base_score * (0.5 + 0.5 * res_factor)
     final_score = float(np.clip(final_score, 0, 100))
 
     return {
@@ -296,42 +306,18 @@ def stroke_width_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     Estimates stroke width via skeleton of binarised text regions.
     Distance transform on the skeleton gives local stroke radii;
     median × 2 = estimated stroke width.
-
-    FIXED (was producing an identical 83.6 score on ~60% of real test
-    images regardless of actual content — two bugs compounded):
-
-    1. `cv2.distanceTransform(..., maskSize=3)` uses a fast *approximate*
-       algorithm that only returns a small set of quantised distance
-       values for thin lines. Any genuinely 1px-wide stroke (extremely
-       common on real document photos) always landed on the same
-       distance value, always producing the same 83.6 score no matter
-       what the image actually contained. Switched to
-       `cv2.DIST_MASK_PRECISE`, which computes true (non-quantised)
-       floating point distances.
-
-    2. The "ideal width = 3px" target was an absolute pixel count with
-       no regard for the image's own scale. A 4000px-wide photo and a
-       400px-wide crop of the *same* physical page have proportionally
-       very different pixel stroke widths, but the old formula judged
-       both against the same fixed 3px target. Stroke width is now
-       normalised against the image's own text-line height (measured
-       from row-projection bands, same technique used elsewhere in
-       this file) before scoring, so the metric is resolution-independent.
-
-    Ideal OCR stroke-to-line-height ratio: ~11% (calibrated against
-    common printed/scanned document proportions).
+    Ideal OCR stroke width: 1-5 px.
+    Score = 100 − clamp(|median_sw − 3| × 15, 0, 100)
     """
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
     _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-
-    # Distance transform on text pixels — precise (non-quantised) distances
-    dist = cv2.distanceTransform(binary, cv2.DIST_L2, cv2.DIST_MASK_PRECISE)
-    # Skeleton-like: keep pixels where dist is a local max
+    # Distance transform on text pixels
+    dist = cv2.distanceTransform(binary, cv2.DIST_L2, 3)
+    # Skeleton-like: keep pixels where dist is local max
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
     dilated = cv2.dilate(dist, kernel)
     skeleton_mask = (dist == dilated) & (binary > 0)
     stroke_radii = dist[skeleton_mask]
-
     if len(stroke_radii) == 0:
         return {
             "factor_name": "stroke_width_score",
@@ -341,50 +327,16 @@ def stroke_width_score(img_bgr: np.ndarray) -> Dict[str, Any]:
             "raw_value": 0,
             "unit": "px",
         }
-
     median_sw = float(np.median(stroke_radii)) * 2  # radius → width
-
-    # Estimate a reference line height so the target scales with the
-    # image's own resolution instead of an absolute pixel count.
-    h, w = binary.shape
-    row_sums = np.sum(binary > 0, axis=1).astype(float)
-    line_height = None
-    if row_sums.max() > 0:
-        threshold_row = row_sums.max() * 0.05
-        in_band = row_sums > threshold_row
-        heights = []
-        start = None
-        for i, val in enumerate(in_band):
-            if val and start is None:
-                start = i
-            elif not val and start is not None:
-                heights.append(i - start)
-                start = None
-        if start is not None:
-            heights.append(h - start)
-        heights = [ht for ht in heights if ht >= 5]
-        if heights:
-            line_height = float(np.median(heights))
-
-    if line_height and line_height > 0:
-        # Ideal stroke width ≈ 11% of line height (typical printed text)
-        ratio = median_sw / line_height
-        ideal_ratio = 0.11
-        score = _clamp(100.0 - abs(ratio - ideal_ratio) * 350.0)
-    else:
-        # No reliable line height detected — fall back to a softer
-        # absolute-pixel scoring band than before
-        score = _clamp(100.0 - abs(median_sw - 3.0) * 10.0)
-
+    score = _clamp(100.0 - abs(median_sw - 3.0) * 15.0)
     return {
         "factor_name": "stroke_width_score",
         "score": round(score, 1),
         "status": _classify(score),
-        "description": f"Median stroke width ≈ {median_sw:.1f} px"
-                       + (f" ({(median_sw / line_height * 100):.1f}% of line height)." if line_height else ".")
-                       + (" Ideal stroke width for OCR." if score >= 70
-                          else " Stroke width slightly outside optimal range." if score >= 45
-                          else " Stroke too thin or thick — may affect character recognition."),
+        "description": f"Median stroke width ≈ {median_sw:.1f} px. "
+                       + ("Ideal stroke width for OCR." if score >= 70
+                          else "Stroke width slightly outside optimal range." if score >= 45
+                          else "Stroke too thin or thick — may affect character recognition."),
         "raw_value": round(median_sw, 2),
         "unit": "px (stroke width)",
     }
@@ -507,31 +459,19 @@ def matra_continuity_score(img_bgr: np.ndarray) -> Dict[str, Any]:
 
         # ── MVS: Matra Visibility Score ──────────────────────────────
         def mvs(zone):
-            # FIXED: this was counting components with area < 4px as
-            # "invalid" and scoring purely on what fraction of components
-            # were "valid". But upper/lower zone marks (matras, vowel
-            # signs) are *supposed* to be small — a well-printed matra
-            # dot or hook is legitimately only a few pixels. That meant
-            # good, correctly-printed Devanagari text was being penalized
-            # for having small features, which is exactly why every test
-            # image showed the app scoring 20-30 points below ChatGPT on
-            # this factor consistently (a systematic bias, not noise).
-            # Now we weight by ink area instead of raw component count,
-            # and drop the min_area filter down to genuine noise specks
-            # only (<= 1px), so real small matra marks count fully.
             if zone.size == 0:
                 return 50.0
             n, _, stats, _ = cv2.connectedComponentsWithStats(
                 zone, connectivity=8)
             if n <= 1:
                 return 100.0
-            min_area = 1
-            areas = [stats[i, cv2.CC_STAT_AREA] for i in range(1, n)]
-            valid_area = sum(a for a in areas if a >= min_area)
-            total_area = sum(areas)
-            if total_area == 0:
+            min_area = 4
+            valid = sum(1 for i in range(1, n)
+                        if stats[i, cv2.CC_STAT_AREA] >= min_area)
+            total = n - 1
+            if total == 0:
                 return 100.0
-            return float(np.clip((valid_area / total_area) * 100, 0, 100))
+            return float(np.clip((valid / total) * 100, 0, 100))
 
         mvs_upper = mvs(upper_zone)
         mvs_lower = mvs(lower_zone)
