@@ -39,6 +39,16 @@ except ImportError:
     COORD_CROP_OK = False
 
 try:
+    # streamlit-cropper gives a real, live drag-to-resize crop box on top of
+    # the image (grab a corner/edge and drag, exactly like an OS screenshot
+    # tool). This is the preferred crop method — it's far more reliable
+    # across Streamlit versions than streamlit-drawable-canvas below.
+    from streamlit_cropper import st_cropper
+    CROPPER_OK = True
+except ImportError:
+    CROPPER_OK = False
+
+try:
     # streamlit-drawable-canvas calls an old internal Streamlit helper
     # (streamlit.elements.image.image_to_url) that newer Streamlit versions
     # removed. We restore it here, routed through Streamlit's real media
@@ -419,7 +429,55 @@ if nav == "🏠 Analyse Image":
 
         if use_crop:
 
-            if CANVAS_OK:
+            if CROPPER_OK:
+
+                st.markdown(
+                    "🖱️ Drag a corner or edge of the box to resize it, or drag inside the box to move it — "
+                    "just like cropping a screenshot."
+                )
+
+                cropped = st_cropper(
+                    raw_pil,
+                    realtime_update=True,
+                    box_color="#00C4B4",
+                    aspect_ratio=None,
+                    return_type="image",
+                    key=f"cropper_{st.session_state.crop_click_ver}_{image_name}",
+                )
+
+                if st.button("↺ Reset Selection"):
+                    st.session_state.crop_click_ver += 1
+                    st.rerun()
+
+                col_a, col_b = st.columns([3, 1])
+
+                with col_a:
+
+                    st.image(
+                        cropped,
+                        caption="Selected Region",
+                        use_container_width=True
+                    )
+
+                with col_b:
+
+                    width, height = cropped.size
+
+                    st.metric(
+                        "Width",
+                        f"{width}px"
+                    )
+
+                    st.metric(
+                        "Height",
+                        f"{height}px"
+                    )
+
+                    st.success("Ready for Analysis")
+
+                st.session_state.analysis_img = cropped
+
+            elif CANVAS_OK:
 
                 st.markdown(
                     "🖱️ Click and drag on the image below to draw a crop box — just like a screenshot tool."
