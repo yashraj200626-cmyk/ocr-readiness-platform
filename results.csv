@@ -1,6 +1,0 @@
-timestamp,image_name,noise_score,resolution_score,blur_score,contrast_score,stroke_width_score,text_density_score,matra_continuity_score,zone_integrity_score,connected_component_stability_score,skew_penalty_score,ocr_readiness_score,ocr_confidence
-2026-07-11 17:56:21,Screenshot 2026-06-08 114810.png,98.6,30.6,93.8,46.7,83.6,69.9,56.2,79.9,64.2,100.0,72.4,34.9
-2026-07-14 10:44:23,Screenshot 2026-06-08 114810.png,98.6,30.6,93.8,46.7,83.6,69.9,56.2,79.9,64.2,100.0,72.4,34.9
-2026-07-15 22:43:30,Screenshot 2026-06-08 114810.png,98.6,30.6,93.8,46.7,83.6,69.9,56.2,79.9,64.2,100.0,72.4,34.9
-2026-07-27 11:32:32,Screenshot 2026-06-08 114810.png,98.6,30.6,93.8,51.9,95.6,69.9,70.4,79.9,64.2,100.0,75.1,34.9
-2026-07-27 12:51:00,Screenshot 2026-06-08 114810.png,98.6,30.6,93.8,46.7,83.6,69.9,56.2,79.9,64.2,100.0,72.4,34.9
