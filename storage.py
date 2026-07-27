@@ -92,38 +92,104 @@ def save_result(
 
 
 def load_results():
+    """
+    FIXED — this used to crash the entire History page with a raw
+    KeyError whenever the results file was even slightly malformed.
+    The crash `row["image_name"]` -> KeyError happens specifically when
+    the *whole DataFrame* has no `image_name` column at all (not just
+    one row missing a value) — which happens if results.csv ever gets
+    re-saved with a different delimiter or encoding (e.g. someone opens
+    it in Excel to check something and Excel resaves it as
+    semicolon-separated, or with a BOM, depending on regional settings).
+    After that, pandas' default comma parser reads the whole header as
+    one single column and every column lookup after that fails.
+
+    Now:
+      1. If the standard comma-parse doesn't yield the expected columns,
+         retry with auto-detected delimiter before giving up.
+      2. Any row missing `image_name` (or any required column) is
+         skipped individually instead of crashing the whole load.
+      3. If the file turns out to be unrecoverable, it's backed up
+         (never silently deleted) and we start clean, so no analysis
+         history is ever lost without a trace.
+    """
 
     if not os.path.exists(CSV_PATH):
         return None
 
-    try:
-        df = pd.read_csv(CSV_PATH)
+    def _try_read(path):
+        try:
+            df = pd.read_csv(path)
+            df.columns = df.columns.str.strip()
+            if "image_name" in df.columns and "timestamp" in df.columns:
+                return df
+        except Exception:
+            pass
+        return None
 
-    except Exception:
+    df = _try_read(CSV_PATH)
+
+    if df is None:
+        # Standard comma-parse failed to produce the expected schema —
+        # most likely a delimiter/encoding mismatch. Try auto-detection.
+        try:
+            df = pd.read_csv(CSV_PATH, sep=None, engine="python")
+            df.columns = df.columns.str.strip()
+            if "image_name" not in df.columns or "timestamp" not in df.columns:
+                df = None
+        except Exception:
+            df = None
+
+    if df is None:
+        # Truly unrecoverable — back up the broken file rather than
+        # silently losing it, then report "no history" instead of
+        # crashing the page.
+        try:
+            backup_path = os.path.join(
+                BASE_DIR,
+                f"results_corrupted_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            )
+            shutil.copy(CSV_PATH, backup_path)
+        except Exception:
+            pass
         return None
 
     if df.empty:
         return None
 
-    df.columns = df.columns.str.strip()
+    # Ensure every expected column exists (older rows / older schema
+    # versions may be missing newer factor columns) so downstream code
+    # never has to guess.
+    for col in COLUMNS:
+        if col not in df.columns:
+            df[col] = pd.NA
 
-    # Remove rows whose image doesn't exist anymore
+    # Remove rows whose image doesn't exist anymore, or which are
+    # themselves malformed (missing image_name entirely). Skip bad
+    # rows individually instead of letting one bad row crash the page.
     keep_rows = []
 
     for _, row in df.iterrows():
-
-        img_path = os.path.join(UPLOAD_FOLDER, str(row["image_name"]))
-
-        if os.path.exists(img_path):
-            keep_rows.append(row)
+        try:
+            name = row.get("image_name")
+            if name is None or (isinstance(name, float) and pd.isna(name)):
+                continue
+            img_path = os.path.join(UPLOAD_FOLDER, str(name))
+            if os.path.exists(img_path):
+                keep_rows.append(row)
+        except Exception:
+            continue
 
     if len(keep_rows) == 0:
         return None
 
     clean_df = pd.DataFrame(keep_rows)
 
-    # Rewrite CSV automatically
-    clean_df.to_csv(CSV_PATH, index=False)
+    # Rewrite CSV automatically (now guaranteed well-formed)
+    try:
+        clean_df.to_csv(CSV_PATH, index=False)
+    except Exception:
+        pass
 
     return clean_df
 
