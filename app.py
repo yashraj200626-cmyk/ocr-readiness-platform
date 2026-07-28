@@ -1624,6 +1624,7 @@ elif nav == "👥 About Team":
             "name":"Yash Rajput",
             "role":"Team Lead",
             "college":"Symbiosis Skills and Professional University, Pune",
+            "course":"B.Tech AIML (Bachelor of Technology in Artificial Intelligence & Machine Learning)",
             "duration":"2 Months",
             "phone":"9811518972",
             "image":"yash.jpg.jpeg"
@@ -1632,6 +1633,7 @@ elif nav == "👥 About Team":
             "name":"Krish",
             "role":"Team Member",
             "college":"Thapar Institute of Engineering and Technology",
+            "course":"B.E. COE (Bachelor of Engineering in Computer Engineering)",
             "duration":"1 Month",
             "phone":"9417976174",
             "image":"krish.jpg.jpeg"
@@ -1640,6 +1642,7 @@ elif nav == "👥 About Team":
             "name":"Vivek",
             "role":"Team Member",
             "college":"KCC Institute of Technology and Management",
+            "course":"B.Tech CS (Bachelor of Technology in Computer Science)",
             "duration":"2 Months",
             "phone":"8527890733",
             "image":"vivek.jpg.jpeg"
@@ -1648,6 +1651,7 @@ elif nav == "👥 About Team":
             "name":"Mansi",
             "role":"Team Member",
             "college":"Indira Gandhi Delhi Technical University for Women (IGDTUW)",
+            "course":"B.Tech CS (Bachelor of Technology in Computer Science)",
             "duration":"6 Weeks",
             "phone":"9210720688",
             "image":"mansi.jpg.jpeg"
@@ -1656,6 +1660,7 @@ elif nav == "👥 About Team":
             "name":"Tanusha",
             "role":"Team Member",
             "college":"Jaypee Institute of Information Technology, Noida Sector 62",
+            "course":"B.Tech CS (Bachelor of Technology in Computer Science)",
             "duration":"2 Months",
             "phone":"8505938377",
             "image":"tanusha.jpg.jpeg"
@@ -1704,6 +1709,9 @@ elif nav == "👥 About Team":
 
             st.write("🎓 **College**")
             st.write(member["college"])
+
+            st.write("📘 **Course**")
+            st.write(member["course"])
 
             st.write("📅 **Internship Duration**")
             st.write(member["duration"])
