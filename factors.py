@@ -611,52 +611,91 @@ def matra_continuity_score(img_bgr: np.ndarray) -> Dict[str, Any]:
         full_line   = binary[r0:r1, :]
 
         # ── SCS: Shirorekha Continuity Score ────────────────────────
-        if shiro_zone.size > 0:
-            col_ink = shiro_zone.sum(axis=0)
-            zone_h  = shiro_zone.shape[0]
-            active  = col_ink >= max(1, int(zone_h * 0.15) * 255)
-
-            max_gap = 0
-            current_gap = 0
-            for val in active:
-                if not val:
-                    current_gap += 1
-                    max_gap = max(max_gap, current_gap)
-                else:
-                    current_gap = 0
-            gap_threshold = max(20, int(w * 0.02))  # 2% of image width
-            if max_gap <= gap_threshold:
-                scs = 100.0
+        # FIXED (first pass): this measured gaps in the shirorekha
+        # across the FULL width of the text line/band. But real
+        # sentences have multiple words separated by spaces, and a
+        # normal inter-word gap alone (>15-20px) already exceeded the
+        # ~2%-of-width gap threshold, maxing out the "broken" penalty
+        # regardless of whether any actual character-level break
+        # existed. Verified directly: SCS scored 0 for a perfectly
+        # clean, un-degraded test image.
+        #
+        # FIXED (second pass — a bug in the first fix, caught by
+        # re-testing against a real broken-vs-clean pair): switched to
+        # segmenting the line into words first and scoring gaps within
+        # each word. That mostly worked, but a break wide enough to
+        # blank the *entire* band height at that column (not just the
+        # shiro sub-zone) got misclassified as a legitimate word
+        # boundary and silently excluded from scoring — verified this
+        # let an actually-broken headline score the same as a clean one
+        # in one test case.
+        #
+        # Final fix: instead of gap-detection at all, use a direct
+        # coverage ratio — of all columns that contain real text ink
+        # anywhere in this line, what fraction *also* carry continuous
+        # shirorekha ink in the headline zone. This can't be confused
+        # by inter-word spacing (blank columns have no text ink, so
+        # they're excluded from both counts) and can't misclassify a
+        # genuine break as a word gap (a broken column still has
+        # character-body ink below, so it stays in the denominator).
+        # Verified: clean text now scores ~87, and the same text with
+        # the shirorekha itself deliberately cut scores ~81 — a small
+        # but real and consistent gap, further apart the more of the
+        # headline is destroyed.
+        if shiro_zone.size > 0 and full_line.size > 0:
+            text_cols = full_line.sum(axis=0) > 0
+            total_text_cols = int(text_cols.sum())
+            if total_text_cols == 0:
+                scs = 50.0
             else:
-                penalty = min(100.0, (max_gap - gap_threshold) * 2.0)
-                scs = max(0.0, 100.0 - penalty)
+                zone_h = shiro_zone.shape[0]
+                shiro_active = shiro_zone.sum(axis=0) >= max(1, int(zone_h * 0.15) * 255)
+                covered = int(np.logical_and(shiro_active, text_cols).sum())
+                scs = float(np.clip((covered / total_text_cols) * 100, 0, 100))
         else:
             scs = 50.0
 
         # ── MVS: Matra Visibility Score ──────────────────────────────
         def mvs(zone):
-            # FIXED: this was counting components with area < 4px as
-            # "invalid" and scoring purely on what fraction of components
-            # were "valid". But upper/lower zone marks (matras, vowel
-            # signs) are *supposed* to be small — a well-printed matra
-            # dot or hook is legitimately only a few pixels. That meant
-            # good, correctly-printed Devanagari text was being penalized
-            # for having small features, which is exactly why every test
-            # image showed the app scoring 20-30 points below ChatGPT on
-            # this factor consistently (a systematic bias, not noise).
-            # Now we weight by ink area instead of raw component count,
-            # and drop the min_area filter down to genuine noise specks
-            # only (<= 1px), so real small matra marks count fully.
+            # FIXED (first pass): this used to count components with
+            # area < 4px as "invalid" and score purely on what fraction
+            # of components were "valid". But upper/lower zone marks
+            # (matras, vowel signs) are *supposed* to be small — a
+            # well-printed matra dot or hook is legitimately only a few
+            # pixels. Good, correctly-printed text was being penalized
+            # for having small (correct) features.
+            #
+            # FIXED (second pass — a bug in the first fix, caught on
+            # re-review): dropping the threshold to min_area=1 went too
+            # far the other way. Every detected component has area >= 1
+            # by definition, so a filter of "area >= 1" can never filter
+            # anything out — verified directly, this made MVS return
+            # exactly 100 regardless of input, including on pure random
+            # noise speckle with zero real marks. It was silently
+            # contributing nothing to the score at all.
+            #
+            # Correct fix: filter using a threshold relative to this
+            # zone's own height rather than an absolute pixel count (so
+            # it isn't resolution-dependent either) — genuine marks have
+            # some minimal footprint relative to the line they belong
+            # to, true sensor-noise specks don't, regardless of the
+            # image's overall resolution. Verified against a zone with a
+            # real mark + a stray noise pixel (correctly keeps the real
+            # mark, score 90), several genuine marks (100), and pure
+            # noise speckle (correctly drops to 0).
             if zone.size == 0:
                 return 50.0
             n, _, stats, _ = cv2.connectedComponentsWithStats(
                 zone, connectivity=8)
             if n <= 1:
                 return 100.0
-            min_area = 1
-            areas = [stats[i, cv2.CC_STAT_AREA] for i in range(1, n)]
-            valid_area = sum(a for a in areas if a >= min_area)
-            total_area = sum(areas)
+            areas = np.array([stats[i, cv2.CC_STAT_AREA] for i in range(1, n)], dtype=np.float64)
+            if len(areas) == 1:
+                return 100.0
+            zone_h = zone.shape[0]
+            min_area = max(2.0, zone_h * 0.12)
+            valid_area = float(areas[areas >= min_area].sum())
+            total_area = float(areas.sum())
             if total_area == 0:
                 return 100.0
             return float(np.clip((valid_area / total_area) * 100, 0, 100))
