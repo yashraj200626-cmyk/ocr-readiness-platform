@@ -36,6 +36,36 @@ def _clamp(v: float, lo=0.0, hi=100.0) -> float:
     return float(max(lo, min(hi, v)))
 
 
+def _binarize_text(gray: np.ndarray) -> np.ndarray:
+    """
+    Shared, polarity-safe text/background binarisation.
+
+    FOUND: every factor doing `cv2.threshold(gray, 0, 255,
+    THRESH_BINARY_INV + THRESH_OTSU)` directly assumes dark text on a
+    light background. Otsu finds the optimal split point regardless of
+    polarity, but THRESH_BINARY_INV always labels "below threshold" as
+    foreground — so on a genuinely inverted document (light text on a
+    dark background, e.g. a chalkboard photo, a photo negative, certain
+    scanner/app "night mode" outputs), it labels the *background* as
+    "text" instead. Verified directly on a light-text-on-dark test page:
+    Connected Component Stability dropped from 85.7 (correct) to 0.0
+    (worst possible) on the exact same document, just recoloured, and
+    Stroke Width silently measured the gaps between letters instead of
+    the letters themselves (12.0px instead of the correct 4.0px).
+
+    Fixed by auto-detecting polarity: real documents have text as the
+    minority of pixels. If Otsu's labeling puts more than half the image
+    in the "text" class, the polarity assumption was backwards, so flip
+    the result. This makes every factor that depends on this function
+    behave the same regardless of whether the photo is normal or
+    color-inverted.
+    """
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    if binary.size > 0 and np.mean(binary > 0) > 0.5:
+        binary = 255 - binary
+    return binary
+
+
 # ──────────────────────────────────────────────
 # YASH — Noise Score (OCR Calibrated)
 # ──────────────────────────────────────────────
@@ -297,7 +327,7 @@ def contrast_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     #    dedicated weighted factor (resolution_score). That silently
     #    double-counted resolution, punishing small/cropped images twice
     #    for the same thing. Removed — contrast now measures contrast only.
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    binary = _binarize_text(gray)
     fg_mask = binary > 0
     bg_mask = ~fg_mask
 
@@ -371,7 +401,28 @@ def stroke_width_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     common printed/scanned document proportions).
     """
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    binary = _binarize_text(gray)
+
+    # FIXED: cv2.distanceTransform has no defined "nearest background pixel"
+    # to measure against when the binarised image is (almost) entirely
+    # foreground — e.g. a solid dark/near-black image, or a badly exposed
+    # photo. In that degenerate case it was returning garbage overflow
+    # values (~1.8e19, suspiciously close to 2^64) instead of erroring,
+    # which propagated into a nonsensical stroke width of ~3.7e19 px and
+    # a broken description string. Guard against it explicitly: distance
+    # transform is only meaningful when there's a real mix of foreground
+    # and background pixels.
+    bg_pixel_count = int(np.sum(binary == 0))
+    if bg_pixel_count < max(20, int(0.001 * binary.size)):
+        return {
+            "factor_name": "stroke_width_score",
+            "score": 50.0,
+            "status": "Average",
+            "description": "Image has no clear text/background separation "
+                           "(near-solid fill) — cannot measure stroke width.",
+            "raw_value": 0,
+            "unit": "px",
+        }
 
     # Distance transform on text pixels — precise (non-quantised) distances
     dist = cv2.distanceTransform(binary, cv2.DIST_L2, cv2.DIST_MASK_PRECISE)
@@ -459,25 +510,30 @@ def text_density_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     back down to 2.9% purely from blur strength, with zero actual change
     to the document. Blurring an image doesn't add or remove any ink.
 
-    Fixed by measuring density as *soft ink coverage* — how dark each
-    pixel is relative to the page's dominant background tone (found via
-    the histogram mode, which stays put under blur since blur only
-    redistributes the minority ink pixels, not the majority background)
-    — averaged continuously rather than hard-counted. Gaussian blur
-    preserves total pixel intensity, so this measure is verified stable
-    to within ~0.01% regardless of blur strength, and still scales
-    correctly with how much real text is on the page.
+    Fixed by measuring density as *soft ink coverage* — how far each
+    pixel's brightness deviates from the page's dominant background tone
+    (found via the histogram mode, which stays put under blur since blur
+    only redistributes the minority ink pixels, not the majority
+    background) — averaged continuously rather than hard-counted.
+    Gaussian blur preserves total pixel intensity, so this measure is
+    verified stable to within ~0.01% regardless of blur strength, and
+    still scales correctly with how much real text is on the page.
+
+    Also handles both polarities (dark text on light background AND
+    light text on dark background/inverted scans) — an earlier version
+    of this fix only measured pixels *darker* than the background and
+    silently reported 0% density on any inverted document.
     """
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
 
     hist = cv2.calcHist([gray.astype(np.uint8)], [0], None, [256], [0, 256]).flatten()
     bg_val = float(np.argmax(hist))
 
-    if bg_val < 1:
-        density_pct = 0.0
-    else:
-        ink = np.clip((bg_val - gray) / bg_val, 0, 1)
-        density_pct = float(ink.mean() * 100)
+    # Distance from background, normalised by the larger available range
+    # on either side (handles both dark-on-light and light-on-dark).
+    span = max(bg_val, 255.0 - bg_val, 1.0)
+    ink = np.clip(np.abs(gray - bg_val) / span, 0, 1)
+    density_pct = float(ink.mean() * 100)
 
     # Bell curve centred at 20 %, std ~15 %
     score = _clamp(100.0 * np.exp(-0.5 * ((density_pct - 20.0) / 15.0) ** 2))
@@ -505,8 +561,7 @@ def matra_continuity_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     Fixed for handwriting and printed Hindi text.
     """
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, 0, 255,
-                              cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    binary = _binarize_text(gray)
     h, w = binary.shape
 
     row_sums = np.sum(binary > 0, axis=1).astype(float)
@@ -720,8 +775,7 @@ def zone_integrity_score(img_bgr: np.ndarray) -> Dict[str, Any]:
     Fixed: nan guards, division by zero protection.
     """
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, 0, 255,
-                              cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    binary = _binarize_text(gray)
     h, w = binary.shape
 
     # ── Detect text lines ────────────────────────────────────────────
@@ -784,6 +838,16 @@ def zone_integrity_score(img_bgr: np.ndarray) -> Dict[str, Any]:
             return 50.0
         try:
             if patch.sum() == 0:
+                return 50.0
+            # FIXED: same distance-transform overflow risk as
+            # stroke_width_score — a patch that's almost entirely
+            # foreground has no defined "nearest background pixel" for
+            # much of its area, which produced garbage (near-overflow)
+            # distance values and NaN/invalid results downstream. Only
+            # run the distance transform when there's a real mix of
+            # foreground and background in this patch.
+            bg_count = int(np.sum(patch == 0))
+            if bg_count < max(5, int(0.001 * patch.size)):
                 return 50.0
             dist = cv2.distanceTransform(patch, cv2.DIST_L2, 5)
             vals = dist[dist > 0]
@@ -940,10 +1004,10 @@ def connected_component_stability_score(img_bgr: np.ndarray) -> Dict[str, Any]:
          Lower CV (more uniform components) → higher score.
     """
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    binary = _binarize_text(gray)
 
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
-    areas = stats[1:, cv2.CC_STAT_AREA]
+    areas = stats[1:, cv2.CC_STAT_AREA].astype(np.float64)
     areas = areas[areas >= 4]  # drop tiny specks
 
     if len(areas) < 2:
@@ -993,7 +1057,7 @@ def skew_penalty_score(img_bgr: np.ndarray) -> Dict[str, Any]:
          0° skew → 100; 16.7°+ skew → 0.
     """
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    binary = _binarize_text(gray)
 
     coords = np.column_stack(np.where(binary > 0))
     if len(coords) < 10:
